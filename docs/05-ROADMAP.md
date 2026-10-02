@@ -12,14 +12,19 @@ Legend: `[ ]` todo, `[x]` done. After each task update "Status" in `CLAUDE.md`.
 
 Goal: tools, accounts and an empty but organized repo.
 
-- [ ] `git init`, first commit with `CLAUDE.md`, `README.md`, `docs/`, `.gitignore`, `.env.example`, the SQL migration.
+- [x] `git init`, first commit with `CLAUDE.md`, `README.md`, `docs/`, `.gitignore`, `.env.example`, the SQL migration.
 - [ ] Ask Argy to create (or confirm) accounts and give you values safely: Supabase project, Railway project, Vercel account, Google AI Studio API key (Gemini). Firebase can wait until Phase 5. Never paste real keys into files that are committed.
-- [ ] Verify tools: Python 3.12 + `uv`, Node LTS, Flutter SDK (`flutter doctor`), Supabase CLI, Railway CLI.
-- [ ] Test that the exchange API is reachable from Argy's location (`GET /api/v3/klines` for BTCUSDT 1h). If blocked, choose another exchange and tell Argy.
-- [ ] Look up the current Gemini model list in Google's docs, propose a Flash-tier model for sentiment, get Argy's OK, set `GEMINI_MODEL`.
-- [ ] Apply the migration to the Supabase project (`supabase db push`) and verify the 12 tables and 5 seeded assets exist.
+  - Done: Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1, free plan); Railway and Vercel accounts confirmed. Open: Gemini API key and database password in the root `.env`.
+- [x] Verify tools: Python 3.12 + `uv`, Node LTS, Flutter SDK (`flutter doctor`), Supabase CLI, Railway CLI.
+  - uv 0.12.22 with uv-managed Python 3.12.15, Node 24.13.1, Flutter 3.41.1 (Android toolchain OK), Supabase CLI 2.119.0 through `npx`, Railway CLI 4.40.0.
+- [x] Test that the exchange API is reachable from Argy's location (`GET /api/v3/klines` for BTCUSDT 1h). If blocked, choose another exchange and tell Argy.
+  - `api.binance.com` is blocked by the ISP. Binance's market-data-only hosts work, so the exchange stays Binance: `BINANCE_REST_URL=https://data-api.binance.vision`, `BINANCE_WS_URL=wss://data-stream.binance.vision`.
+- [x] Look up the current Gemini model list in Google's docs, propose a Flash-tier model for sentiment, get Argy's OK, set `GEMINI_MODEL`.
+  - `gemini-3.8-flash`, approved by Argy on 2026-10-03.
+- [x] Apply the migration to the Supabase project (`supabase db push`) and verify the 12 tables and 5 seeded assets exist.
+  - Applied through the Supabase connector (the local CLI is logged in to another account); history row aligned to `20261003000000`. Verified: 12 tables, RLS on all, 11 policies, 5 assets.
 
-**Gate 0:** the database exists with the schema, the exchange is reachable, and a Gemini test call returns valid JSON.
+**Gate 0:** the database exists with the schema, the exchange is reachable, and a Gemini test call returns valid JSON. Check with `uv run scripts/gate0_check.py`.
 
 ---
 

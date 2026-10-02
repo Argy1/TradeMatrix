@@ -80,7 +80,9 @@ TradeMatrix/
 - Backend: `cd backend && uv run pytest` / `uv run ruff check .` / `uv run uvicorn app.api.main:app --reload` / `uv run python -m app.worker.main`
 - Web: `cd apps/web && npm run dev` / `npm run lint` / `npm test`
 - Mobile: `cd apps/mobile && flutter run` / `flutter analyze` / `flutter test`
-- Database: `supabase db push` (apply `supabase/migrations`)
+- Database: `npx supabase db push` (apply `supabase/migrations`). The Supabase CLI runs through `npx`, there is no global install. While the CLI is logged in to a different Supabase account, apply migrations through the Supabase connector or with `npx supabase db push --db-url <session pooler URL>`.
+- Gate 0 check: `uv run scripts/gate0_check.py` (from the repo root; reads the root `.env`)
+- Python: `uv` manages Python 3.12 (the system Python is 3.14 and is not used).
 
 If a command here does not exist yet, create it as part of the task and update this section.
 
@@ -115,6 +117,10 @@ If a command here does not exist yet, create it as part of the task and update t
 
 Update this block as work progresses.
 
-- Current phase: **Phase 0 — Setup** (see docs/05-ROADMAP.md)
-- Last completed task: none yet
-- Known issues: none yet
+- Current phase: **Phase 0 — Setup** (see docs/05-ROADMAP.md). Gate 0 is waiting only for the Gemini test call (needs `GEMINI_API_KEY` in the root `.env`).
+- Last completed task: Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) created and the init migration applied and verified (12 tables, RLS on all, 5 assets).
+- Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
+- Known issues:
+  - `api.binance.com` is blocked on Argy's network, and it also rejects US IPs. Always use the hosts from the env variables, and pick a Singapore region on Railway in Phase 1.
+  - The Supabase CLI on this machine is logged in to another Supabase account, so `supabase link` cannot see this project (see Commands).
+  - `flutter doctor`: the Visual Studio C++ workload is incomplete. It only affects Windows desktop builds, which are not a target.
