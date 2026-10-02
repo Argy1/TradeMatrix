@@ -1,0 +1,43 @@
+[project]
+name = "tradematrix-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "pydantic-settings>=2.15.0",
+    "pyjwt[crypto]>=2.15.1",
+    "slowapi>=0.1.10",
+    "sqlalchemy[asyncio]>=2.1.2",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]
+
+# The code is run from this folder (uvicorn app.api.main:app), not installed as a wheel.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F: errors, I: import order, UP: modern syntax, B: likely bugs, SIM: simplifications,
+# ASYNC: blocking calls inside async code, RUF: ruff's own checks.
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["live: calls a real external service (run with `-m live`)"]
+addopts = "-m 'not live'"

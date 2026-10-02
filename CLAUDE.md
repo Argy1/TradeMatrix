@@ -77,7 +77,7 @@ TradeMatrix/
 
 ## Commands (fill in the exact ones when you scaffold each part)
 
-- Backend: `cd backend && uv run pytest` / `uv run ruff check .` / `uv run uvicorn app.api.main:app --reload` / `uv run python -m app.worker.main`
+- Backend: `cd backend && uv run pytest` / `uv run ruff check .` / `uv run uvicorn app.api.main:app --reload` / `uv run python -m app.worker.main` (the worker arrives in Phase 2). `uv run pytest -m live` runs the one test that calls the real exchange.
 - Web: `cd apps/web && npm run dev` / `npm run lint` / `npm test`
 - Mobile: `cd apps/mobile && flutter run` / `flutter analyze` / `flutter test`
 - Database: `npx supabase db push` (apply `supabase/migrations`). The Supabase CLI runs through `npx`, there is no global install. While the CLI is logged in to a different Supabase account, apply migrations through the Supabase connector or with `npx supabase db push --db-url <session pooler URL>`.
@@ -118,7 +118,9 @@ If a command here does not exist yet, create it as part of the task and update t
 Update this block as work progresses.
 
 - Current phase: **Phase 1 — Foundations** (see docs/05-ROADMAP.md). Gate 0 passed on 2026-10-03.
-- Last completed task: Phase 0. Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) has the init migration (12 tables, RLS on all, 5 assets); the exchange and the Gemini JSON test call both pass in `scripts/gate0_check.py`.
+- Last completed task: Phase 1, first slice. `backend/` is scaffolded (uv, FastAPI, ruff, pytest) with the Binance market-data client, candle quality checks, the indicators (SMA, EMA, RSI, MACD, Bollinger, ATR, ADX, OBV), Supabase JWT verification and `/health`; 44 tests pass.
+- Next: everything that needs the database (engine check against the pooler, candle upserts, `ingest_candles`, the backfill CLI, `/v1/assets`, `/v1/candles`, `/v1/status`), then the Railway deploy. Blocked on the database password in the root `.env`.
+- Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) with the init migration (12 tables, RLS on all, 5 assets).
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
 - Known issues:
   - `api.binance.com` is blocked on Argy's network, and it also rejects US IPs. Always use the hosts from the env variables, and pick a Singapore region on Railway in Phase 1.

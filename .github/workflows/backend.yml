@@ -1,0 +1,25 @@
+name: backend
+
+on:
+  push:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # uv.lock pins every package, so CI installs exactly what runs locally.
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      # Tests marked "live" call the real exchange and are skipped by default.
+      - run: uv run pytest -q

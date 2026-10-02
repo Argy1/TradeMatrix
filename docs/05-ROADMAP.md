@@ -35,13 +35,17 @@ Gate 0 passed on 2026-10-03: schema verified (12 tables, 5 assets), 2 closed BTC
 Goal: candles flow into the database and a chart endpoint works.
 
 - [ ] Scaffold `backend/` (uv project, FastAPI app, config via pydantic-settings, async SQLAlchemy engine with `statement_cache_size=0`, ruff, pytest).
-- [ ] `ExchangeClient` interface + Binance implementation (klines REST, pagination, rate-limit handling, closed-candle filter).
+  - Done except one check: the engine in `app/db.py` has not connected to the Supabase pooler yet (needs the database password in `.env`).
+- [x] `ExchangeClient` interface + Binance implementation (klines REST, pagination, rate-limit handling, closed-candle filter).
 - [ ] `ingest_candles` job + CLI `python -m app.data.backfill` for the history sizes in docs/03; idempotent upserts; data-quality checks.
-- [ ] Core indicators + tests (RSI, EMA, MACD, Bollinger, ATR, ADX, OBV).
+  - Done so far: the data-quality checks (`app/data/quality.py`). The job, the upserts and the CLI need the database.
+- [x] Core indicators + tests (RSI, EMA, MACD, Bollinger, ATR, ADX, OBV).
 - [ ] API: `/health`, `/v1/assets`, `/v1/candles` (with indicator series), `/v1/status`, OpenAPI docs, CORS, rate limit.
-- [ ] Supabase JWT verification dependency (used later by protected routes) + a test with a fake token.
+  - Done so far: `/health`, OpenAPI docs, CORS, rate limit, the shared error shape. The `/v1` routes need the database.
+- [x] Supabase JWT verification dependency (used later by protected routes) + a test with a fake token.
 - [ ] Deploy `api` to Railway with env vars; confirm `/health` works on the public URL.
 - [ ] GitHub Actions for backend lint + tests.
+  - `.github/workflows/backend.yml` is written; it first runs when the repo is pushed to GitHub (needs Argy's OK).
 
 **Gate 1:** 2 years of 1h candles for the 5 coins are stored; `GET /v1/candles` returns candles with valid indicators on the Railway URL; tests pass.
 
