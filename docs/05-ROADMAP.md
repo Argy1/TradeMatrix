@@ -13,8 +13,8 @@ Legend: `[ ]` todo, `[x]` done. After each task update "Status" in `CLAUDE.md`.
 Goal: tools, accounts and an empty but organized repo.
 
 - [x] `git init`, first commit with `CLAUDE.md`, `README.md`, `docs/`, `.gitignore`, `.env.example`, the SQL migration.
-- [ ] Ask Argy to create (or confirm) accounts and give you values safely: Supabase project, Railway project, Vercel account, Google AI Studio API key (Gemini). Firebase can wait until Phase 5. Never paste real keys into files that are committed.
-  - Done: Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1, free plan); Railway and Vercel accounts confirmed. Open: Gemini API key and database password in the root `.env`.
+- [x] Ask Argy to create (or confirm) accounts and give you values safely: Supabase project, Railway project, Vercel account, Google AI Studio API key (Gemini). Firebase can wait until Phase 5. Never paste real keys into files that are committed.
+  - Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1, free plan); Railway and Vercel accounts confirmed; Gemini key is in the git-ignored root `.env`. The Railway project is created at deploy time in Phase 1, which also needs the database password in `.env`.
 - [x] Verify tools: Python 3.12 + `uv`, Node LTS, Flutter SDK (`flutter doctor`), Supabase CLI, Railway CLI.
   - uv 0.12.22 with uv-managed Python 3.12.15, Node 24.13.1, Flutter 3.41.1 (Android toolchain OK), Supabase CLI 2.119.0 through `npx`, Railway CLI 4.40.0.
 - [x] Test that the exchange API is reachable from Argy's location (`GET /api/v3/klines` for BTCUSDT 1h). If blocked, choose another exchange and tell Argy.
@@ -25,6 +25,8 @@ Goal: tools, accounts and an empty but organized repo.
   - Applied through the Supabase connector (the local CLI is logged in to another account); history row aligned to `20261003000000`. Verified: 12 tables, RLS on all, 11 policies, 5 assets.
 
 **Gate 0:** the database exists with the schema, the exchange is reachable, and a Gemini test call returns valid JSON. Check with `uv run scripts/gate0_check.py`.
+
+Gate 0 passed on 2026-10-03: schema verified (12 tables, 5 assets), 2 closed BTCUSDT 1h candles fetched, and `gemini-3.8-flash` returned schema-valid JSON for 3 sample headlines.
 
 ---
 

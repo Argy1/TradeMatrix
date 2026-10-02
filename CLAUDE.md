@@ -117,8 +117,8 @@ If a command here does not exist yet, create it as part of the task and update t
 
 Update this block as work progresses.
 
-- Current phase: **Phase 0 — Setup** (see docs/05-ROADMAP.md). Gate 0 is waiting only for the Gemini test call (needs `GEMINI_API_KEY` in the root `.env`).
-- Last completed task: Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) created and the init migration applied and verified (12 tables, RLS on all, 5 assets).
+- Current phase: **Phase 1 — Foundations** (see docs/05-ROADMAP.md). Gate 0 passed on 2026-10-03.
+- Last completed task: Phase 0. Supabase project `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) has the init migration (12 tables, RLS on all, 5 assets); the exchange and the Gemini JSON test call both pass in `scripts/gate0_check.py`.
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
 - Known issues:
   - `api.binance.com` is blocked on Argy's network, and it also rejects US IPs. Always use the hosts from the env variables, and pick a Singapore region on Railway in Phase 1.
