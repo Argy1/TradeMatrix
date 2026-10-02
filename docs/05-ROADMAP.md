@@ -34,20 +34,21 @@ Gate 0 passed on 2026-10-03: schema verified (12 tables, 5 assets), 2 closed BTC
 
 Goal: candles flow into the database and a chart endpoint works.
 
-- [ ] Scaffold `backend/` (uv project, FastAPI app, config via pydantic-settings, async SQLAlchemy engine with `statement_cache_size=0`, ruff, pytest).
-  - Done except one check: the engine in `app/db.py` has not connected to the Supabase pooler yet (needs the database password in `.env`).
+- [x] Scaffold `backend/` (uv project, FastAPI app, config via pydantic-settings, async SQLAlchemy engine with `statement_cache_size=0`, ruff, pytest).
 - [x] `ExchangeClient` interface + Binance implementation (klines REST, pagination, rate-limit handling, closed-candle filter).
-- [ ] `ingest_candles` job + CLI `python -m app.data.backfill` for the history sizes in docs/03; idempotent upserts; data-quality checks.
-  - Done so far: the data-quality checks (`app/data/quality.py`). The job, the upserts and the CLI need the database.
+- [x] `ingest_candles` job + CLI `python -m app.data.backfill` for the history sizes in docs/03; idempotent upserts; data-quality checks.
+  - The job logic is `app/data/ingest.py`; the scheduler that runs it at every candle close is the Phase 2 worker.
 - [x] Core indicators + tests (RSI, EMA, MACD, Bollinger, ATR, ADX, OBV).
-- [ ] API: `/health`, `/v1/assets`, `/v1/candles` (with indicator series), `/v1/status`, OpenAPI docs, CORS, rate limit.
-  - Done so far: `/health`, OpenAPI docs, CORS, rate limit, the shared error shape. The `/v1` routes need the database.
+- [x] API: `/health`, `/v1/assets`, `/v1/candles` (with indicator series), `/v1/status`, OpenAPI docs, CORS, rate limit.
 - [x] Supabase JWT verification dependency (used later by protected routes) + a test with a fake token.
-- [ ] Deploy `api` to Railway with env vars; confirm `/health` works on the public URL.
+- [x] Deploy `api` to Railway with env vars; confirm `/health` works on the public URL.
+  - https://api-production-a829.up.railway.app, Railway project `tradematrix`, service `api`, region asia-southeast1 (Singapore).
 - [ ] GitHub Actions for backend lint + tests.
-  - `.github/workflows/backend.yml` is written; it first runs when the repo is pushed to GitHub (needs Argy's OK).
+  - `.github/workflows/backend.yml` is pushed to the private repo; its first result has not been checked yet.
 
 **Gate 1:** 2 years of 1h candles for the 5 coins are stored; `GET /v1/candles` returns candles with valid indicators on the Railway URL; tests pass.
+
+Gate 1 passed on 2026-10-03: 17,520 1h candles per coin (2.00 years, no gaps) plus 3 years of 4h and 5 years of 1d; `/v1/candles` on the Railway URL returns candles with every indicator filled; 60 unit tests, 4 database tests and 1 live exchange test pass.
 
 ---
 

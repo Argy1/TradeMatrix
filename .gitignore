@@ -29,9 +29,7 @@ build/
 .flutter-plugins*
 *.iml
 
-# data and models
-backend/data/
-backend/models/
+# data and models (backend/data/ and backend/models/ are ignored in backend/.gitignore)
 *.joblib
 *.parquet
 

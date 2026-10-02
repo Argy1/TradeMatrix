@@ -30,3 +30,15 @@ Settings come from environment variables, or from the git-ignored `.env` in the 
 | `app/api/main.py` | FastAPI app: CORS, rate limit, error shape, `/health` |
 | `app/api/auth.py` | Supabase JWT verification for protected routes |
 | `tests/` | One test file per module |
+
+## Deploy (Railway)
+
+The `api` service builds `backend/Dockerfile` (settings in `backend/railway.toml`) and runs in Singapore,
+close to the Supabase database. Variables are set on the service, never committed.
+
+```bash
+railway up --service api --ci     # from backend/: upload, build and deploy
+railway logs --service api        # read the logs
+```
+
+Public URL: https://api-production-a829.up.railway.app (`/health`, `/docs`, `/v1/...`).

@@ -117,11 +117,11 @@ If a command here does not exist yet, create it as part of the task and update t
 
 Update this block as work progresses.
 
-- Current phase: **Phase 1 — Foundations** (see docs/05-ROADMAP.md). Gate 0 passed on 2026-10-03.
+- Current phase: **Phase 2 — Prediction engine v1** (see docs/05-ROADMAP.md). Gates 0 and 1 passed on 2026-10-03.
 - Last completed task: Phase 1, first slice. `backend/` is scaffolded (uv, FastAPI, ruff, pytest) with the Binance market-data client, candle quality checks, the indicators (SMA, EMA, RSI, MACD, Bollinger, ATR, ADX, OBV), Supabase JWT verification and `/health`; 44 tests pass.
-- Also written, with fake-based tests (60 pass) but **not yet run against Supabase**: candle upserts and gap detection (`app/data/repo.py`), `ingest_candles`, the backfill CLI, `/v1/assets`, `/v1/candles`, `/v1/status`.
-- Next: once the database password in the root `.env` works, run `uv run pytest -m db`, run `uv run python -m app.data.backfill`, then deploy `api` to Railway (Argy approved creating the project) and push to GitHub (approved; needs a repo URL or the `gh` CLI).
-- Blocked: the database password Argy gave on 2026-10-03 was rejected by Supabase ("password authentication failed"). Do not retry in a loop; repeated failures can get the IP banned.
+- Gate 1 passed on 2026-10-03. Candle history is backfilled (129,580 rows, no gaps); the API runs on Railway at https://api-production-a829.up.railway.app (project `tradematrix`, service `api`, Singapore region; deploy with `cd backend && railway up --service api --ci`).
+- GitHub: https://github.com/Argy1/TradeMatrix (private). The first GitHub Actions result has not been checked yet.
+- Next: Phase 2, the prediction engine.
 - Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) with the init migration (12 tables, RLS on all, 5 assets).
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
 - Known issues:

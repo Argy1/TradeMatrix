@@ -185,7 +185,9 @@ async def record_heartbeat(session: AsyncSession, job_name: str, error: str | No
         text(
             """
             insert into worker_heartbeat (job_name, last_run_at, last_success_at, last_error)
-            values (:job_name, now(), case when :error is null then now() end, :error)
+            values (:job_name, now(),
+                    -- the cast tells Postgres the type even when error is NULL
+                    case when cast(:error as text) is null then now() end, cast(:error as text))
             on conflict (job_name) do update
             set last_run_at = now(),
                 last_success_at = coalesce(

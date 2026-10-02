@@ -1,0 +1,5 @@
+# Downloaded datasets and trained model files stay out of git.
+# The leading "/" anchors each rule to this folder, so it can never match app/data/
+# (Railway's upload misread the unanchored rule and dropped the app/data package).
+/data/
+/models/
