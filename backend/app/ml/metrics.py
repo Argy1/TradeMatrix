@@ -112,6 +112,8 @@ def bootstrap_ci(
 
     If the whole interval is above zero, the edge is unlikely to be luck."""
     values = np.asarray(values, dtype=float)
+    if len(values) == 0:  # e.g. the model never left the Neutral band
+        return float("nan"), float("nan"), float("nan")
     rng = np.random.default_rng(seed)
     means = rng.choice(values, size=(n_resamples, len(values)), replace=True).mean(axis=1)
     return float(values.mean()), float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))

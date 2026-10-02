@@ -20,12 +20,20 @@ class Fold:
 
 
 def walk_forward(
-    times: pd.DatetimeIndex, *, train: int, val: int, test: int, step: int, embargo: int = 1
+    times: pd.DatetimeIndex,
+    *,
+    train: int,
+    val: int,
+    test: int,
+    step: int,
+    embargo: int = 1,
+    expanding: bool = False,
 ) -> list[Fold]:
     """Folds over candle times (sizes are counted in candles, not rows).
 
     `times` may repeat when several coins are pooled; all rows with the same time always land
     in the same part, so no coin's future can leak into another coin's past.
+    With `expanding=True` each fold trains on ALL earlier candles instead of the last `train`.
     """
     unique = pd.DatetimeIndex(sorted(set(times)))
     position = unique.get_indexer(times)  # each row's candle number
@@ -47,7 +55,7 @@ def walk_forward(
         folds.append(
             Fold(
                 number=len(folds) + 1,
-                train=rows(start, train_end),
+                train=rows(0 if expanding else start, train_end),
                 early_stop=rows(val_start, middle),
                 calibrate=rows(middle, val_end),
                 test=rows(test_start, test_end),

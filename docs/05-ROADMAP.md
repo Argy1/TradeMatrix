@@ -63,8 +63,13 @@ Goal: a model that is **measured honestly**.
   - Training and Platt calibration are done (`app/ml/train.py`). Storage upload and `model_versions` rows are still open; they need `SUPABASE_SERVICE_ROLE_KEY`.
 - [x] Backtest report generator (`backend/reports/…md`) for each asset/timeframe.
   - First run, 2026-10-03, 11 reports: no model beats the baselines with a margin that survives the bootstrap check. On 1h the Brier score equals the base rate, so there is no probability edge. On 4h and pooled 1d the Brier score is significantly worse than the base rate (overconfident). Simulated long-only returns after fees lose money on every coin except XRP 4h, which still trails buy and hold.
+  - Improvement round, 2026-10-03 (Argy chose option 1). Changes: 1h/4h/1d history extended back to 2020-09; larger early-stopping and calibration windows; 4 candidate settings compared ONLY on test folds inside 2021–2024 (`reports/tuning_2026-10-02.md`); winners frozen in `app/ml/config.py`; then scored once on 2024-10 onwards.
+  - Result: **1h beats both baselines for BTC, ETH, BNB and XRP** (accuracy on calls 55–57% vs naive about 48%, coverage 14–18%; Brier 0.2489–0.2495 vs 0.2500; both bootstrap intervals above zero, ETH only just). SOL 1h, all 4h and the pooled 1d model do not. Trading every hourly Up call after fees still loses money: the edge is real but smaller than trading costs.
+  - Caveat: the 2024-10 onwards period was also scored once in the first run, before the improvement round, so it is not perfectly unseen. Fresh live predictions are the real test.
 - [ ] `run_predictions` job (idempotent), `resolve_outcomes` job, `worker` service with APScheduler, advisory locks, heartbeat table updates.
+  - Done so far: the worker service with APScheduler, transaction-level advisory locks, `ingest_candles` every hour and a heartbeat every 5 minutes. `run_predictions` and `resolve_outcomes` are next.
 - [ ] Deploy `worker` to Railway (one replica). Predictions appear in the database at every candle close.
+  - The worker runs on Railway (Singapore, one replica) and keeps the candles current; predictions start once `run_predictions` exists.
 - [ ] Notebook in `backend/notebooks/` that reproduces the report so Argy can read and learn from it.
 
 **Gate 2 (decision point):** show Argy the report. Continue to Phase 3 only if the out-of-sample accuracy and Brier score beat the baselines with a margin that survives the bootstrap check **or** Argy explicitly decides to proceed with the honest result anyway (the track-record page will show it). If the model does not beat the baseline, spend extra time on features/data/validation first and re-run. Never tune on the test folds.

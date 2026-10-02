@@ -103,6 +103,20 @@ async def latest_open_time(session: AsyncSession, asset_id: int, timeframe: str)
     ).scalar_one()
 
 
+async def earliest_open_time(
+    session: AsyncSession, asset_id: int, timeframe: str
+) -> datetime | None:
+    return (
+        await session.execute(
+            text(
+                "select min(open_time) from candles "
+                "where asset_id = :asset_id and timeframe = :timeframe"
+            ),
+            {"asset_id": asset_id, "timeframe": timeframe},
+        )
+    ).scalar_one()
+
+
 async def fetch_candles(
     session: AsyncSession,
     asset_id: int,

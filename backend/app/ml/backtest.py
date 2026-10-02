@@ -22,7 +22,15 @@ from app.config import BACKEND_DIR
 from app.data import repo
 from app.features.build import build_dataset, feature_columns
 from app.ml import metrics
-from app.ml.config import EMBARGO, NEUTRAL_HIGH, NEUTRAL_LOW, PERIODS_PER_YEAR, WINDOWS
+from app.ml.config import (
+    EMBARGO,
+    EVAL_FROM,
+    NEUTRAL_HIGH,
+    NEUTRAL_LOW,
+    PERIODS_PER_YEAR,
+    ModelConfig,
+    chosen,
+)
 from app.ml.train import fit_calibrated
 from app.ml.walkforward import walk_forward
 
@@ -59,15 +67,44 @@ async def load_datasets(symbols: list[str], timeframe: str) -> dict[str, pd.Data
     return datasets
 
 
-def run_walk_forward(data: pd.DataFrame, timeframe: str) -> tuple[pd.DataFrame, list[dict]]:
-    """Out-of-sample predictions for every test fold, plus per-fold numbers."""
+async def load_jobs(symbols: list[str], timeframe: str) -> list[tuple[str, pd.DataFrame]]:
+    """One dataset per coin, or one pooled dataset for 1d (too few daily candles per coin)."""
+    datasets = await load_datasets(symbols, timeframe)
+    if timeframe != "1d":
+        return list(datasets.items())
+    pooled = pd.concat(
+        [d.assign(asset_id=float(i)) for i, d in enumerate(datasets.values())]
+    ).sort_index(kind="stable")
+    return [("ALL", pooled)]
+
+
+def run_walk_forward(
+    data: pd.DataFrame,
+    timeframe: str,
+    config: ModelConfig | None = None,
+    test_from: datetime | None = None,
+    test_until: datetime | None = None,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """Out-of-sample predictions for every test fold, plus per-fold numbers.
+
+    `test_from` / `test_until` keep only folds whose test period lies inside that window, so the
+    tuning script can compare settings on old data without ever touching the final test period.
+    """
+    config = config or chosen(timeframe)
     features = feature_columns(data)
-    folds = walk_forward(data.index, **WINDOWS[timeframe], embargo=EMBARGO)
+    folds = [
+        fold
+        for fold in walk_forward(
+            data.index, **config.windows, embargo=EMBARGO, expanding=config.expanding
+        )
+        if (test_from is None or data.index[fold.test].min() >= test_from)
+        and (test_until is None or data.index[fold.test].max() < test_until)
+    ]
     predictions, fold_rows, importances = [], [], []
     for fold in folds:
         train, test = data.iloc[fold.train], data.iloc[fold.test]
         model = fit_calibrated(
-            train, data.iloc[fold.early_stop], data.iloc[fold.calibrate], features
+            train, data.iloc[fold.early_stop], data.iloc[fold.calibrate], features, config.params
         )
         p = model.predict(test)
         y, prev_up = test["label"].to_numpy(), test["prev_up"].to_numpy()
@@ -157,7 +194,8 @@ def _pct(value: float | None, digits: int = 1) -> str:
 def write_report(name: str, timeframe: str, summary: dict, preds: pd.DataFrame) -> Path:
     REPORTS_DIR.mkdir(exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y-%m-%d")
-    path = REPORTS_DIR / f"backtest_{name}_{timeframe}_{stamp}.md"
+    config = chosen(timeframe)
+    path = REPORTS_DIR / f"backtest_{name}_{timeframe}_{stamp}_{config.name}.md"
     preds.to_csv(path.with_suffix(".csv"))
     m, b, s = summary["model"], summary["baselines"], summary["strategy"]
     acc, brier = summary["accuracy_edge_vs_naive"], summary["brier_edge_vs_base_rate"]
@@ -170,6 +208,11 @@ def write_report(name: str, timeframe: str, summary: dict, preds: pd.DataFrame) 
     )
     lines = [
         f"# Backtest {name} {timeframe} ({stamp})",
+        "",
+        f"Model settings: `{config.name}` (chosen on the 2021-2024 development window only, see "
+        "`reports/tuning_*.md`). Test folds start on or after "
+        f"{EVAL_FROM:%Y-%m-%d}. Note: this period was also scored once in the first run "
+        "(before the improvement round), so it is not perfectly unseen.",
         "",
         f"Out-of-sample period: {start:%Y-%m-%d} to {end:%Y-%m-%d}, {len(summary['folds'])} "
         f"walk-forward folds, {m['n']} predictions. "
@@ -231,17 +274,11 @@ async def run(symbols: list[str], timeframes: list[str]) -> list[tuple[str, str,
     results = []
     try:
         for timeframe in timeframes:
-            datasets = await load_datasets(symbols, timeframe)
-            if timeframe == "1d":
-                # Too few daily candles per coin, so one model learns from all coins together.
-                pooled = pd.concat(
-                    [d.assign(asset_id=float(i)) for i, d in enumerate(datasets.values())]
-                ).sort_index(kind="stable")
-                jobs = [("ALL", pooled)]
-            else:
-                jobs = list(datasets.items())
+            jobs = await load_jobs(symbols, timeframe)
             for name, data in jobs:
-                preds, fold_rows = await asyncio.to_thread(run_walk_forward, data, timeframe)
+                preds, fold_rows = await asyncio.to_thread(
+                    run_walk_forward, data, timeframe, chosen(timeframe), EVAL_FROM
+                )
                 summary = summarize(preds, fold_rows, timeframe)
                 path = write_report(name, timeframe, summary, preds)
                 results.append((name, timeframe, summary, path))

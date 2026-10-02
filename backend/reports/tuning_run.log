@@ -1,0 +1,12 @@
+1h  v1                   folds= 39 brier_gain=+0.00105 acc_edge=+10.20pp coverage=28.5%
+1h  bigval               folds= 39 brier_gain=+0.00174 acc_edge=+9.98pp coverage=26.1%
+1h  bigval_strongreg     folds= 39 brier_gain=+0.00184 acc_edge=+10.63pp coverage=27.9%
+1h  expanding_strongreg  folds= 39 brier_gain=+0.00212 acc_edge=+10.31pp coverage=28.2%
+4h  v1                   folds= 33 brier_gain=-0.00158 acc_edge=+7.33pp coverage=37.5%
+4h  bigval               folds= 33 brier_gain=+0.00021 acc_edge=+7.43pp coverage=22.2%
+4h  bigval_strongreg     folds= 33 brier_gain=+0.00047 acc_edge=+8.76pp coverage=22.2%
+4h  expanding_strongreg  folds= 33 brier_gain=+0.00047 acc_edge=+10.59pp coverage=21.8%
+1d  v1                   folds=  5 brier_gain=+0.00139 acc_edge=+5.97pp coverage=32.8%
+1d  bigval               folds=  5 brier_gain=-0.00117 acc_edge=+7.23pp coverage=39.9%
+1d  bigval_strongreg     folds=  5 brier_gain=-0.00268 acc_edge=+7.40pp coverage=32.7%
+1d  expanding_strongreg  folds=  5 brier_gain=-0.00188 acc_edge=+4.24pp coverage=30.2%

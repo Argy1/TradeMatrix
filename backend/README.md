@@ -33,12 +33,29 @@ Settings come from environment variables, or from the git-ignored `.env` in the 
 
 ## Deploy (Railway)
 
-The `api` service builds `backend/Dockerfile` (settings in `backend/railway.toml`) and runs in Singapore,
-close to the Supabase database. Variables are set on the service, never committed.
+Project `tradematrix`, two services built from `backend/Dockerfile`, both in Singapore
+(asia-southeast1, close to the Supabase database), one replica each. Railway's
+`railway.toml` config files are deprecated, so these settings live on the services:
+
+| Service | Start command | Health check | Restart |
+| --- | --- | --- | --- |
+| `api` | Dockerfile `CMD` (uvicorn) | `/health`, 60 s | on failure, max 5 |
+| `worker` | `python -m app.worker.main` | none (see `/v1/status`) | always |
+
+Variables are set on each service from the root `.env`, never committed. The worker must
+stay at exactly one replica.
 
 ```bash
-railway up --service api --ci     # from backend/: upload, build and deploy
-railway logs --service api        # read the logs
+railway up --service api --ci       # from backend/: upload, build and deploy
+railway up --service worker --ci
+railway logs --service worker
 ```
 
 Public URL: https://api-production-a829.up.railway.app (`/health`, `/docs`, `/v1/...`).
+
+## Model research
+
+```bash
+uv run python -m app.ml.tune        # compare candidate settings on 2021-2024 only
+uv run python -m app.ml.backtest    # evaluate the chosen settings on 2024-10 onwards
+```

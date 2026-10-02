@@ -2,6 +2,7 @@
 
     uv run python -m app.data.backfill                       # all coins, 1h + 4h + 1d
     uv run python -m app.data.backfill --symbols BTC,ETH --timeframes 1h
+    uv run python -m app.data.backfill --since 2020-09-01    # also load older history
 
 Safe to run again at any time: it only fetches what is missing.
 """
@@ -9,16 +10,19 @@ Safe to run again at any time: it only fetches what is missing.
 import argparse
 import asyncio
 import sys
+from datetime import UTC, datetime
 
 from app import db
 from app.config import get_settings
 from app.data import repo
 from app.data.exchanges import ExchangeError, get_exchange_client
-from app.data.ingest import ingest_candles
+from app.data.ingest import extend_history, ingest_candles
 from app.timeframes import TIMEFRAMES
 
 
-async def run(symbols: list[str] | None, timeframes: list[str]) -> int:
+async def run(
+    symbols: list[str] | None, timeframes: list[str], since: datetime | None = None
+) -> int:
     factory = db.session_factory()
     if factory is None:
         print("DATABASE_URL is not configured. Fill it in the root .env first.")
@@ -35,6 +39,10 @@ async def run(symbols: list[str] | None, timeframes: list[str]) -> int:
                 for timeframe in timeframes:
                     try:
                         result = await ingest_candles(session, client, asset, timeframe)
+                        if since is not None:
+                            older = await extend_history(session, client, asset, timeframe, since)
+                            result.fetched += older.fetched
+                            result.stored += older.stored
                     except ExchangeError as exc:
                         failures += 1
                         await session.rollback()
@@ -66,13 +74,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Backfill candles from the exchange.")
     parser.add_argument("--symbols", help="comma-separated, e.g. BTC,ETH (default: all active)")
     parser.add_argument("--timeframes", default=",".join(TIMEFRAMES), help="default: 1h,4h,1d")
+    parser.add_argument("--since", help="also load history back to this UTC date, e.g. 2020-09-01")
     args = parser.parse_args()
     timeframes = [t for t in args.timeframes.split(",") if t]
     unknown = [t for t in timeframes if t not in TIMEFRAMES]
     if unknown:
         parser.error(f"unknown timeframes: {unknown}")
     symbols = [s.upper() for s in args.symbols.split(",")] if args.symbols else None
-    return asyncio.run(run(symbols, timeframes))
+    since = datetime.fromisoformat(args.since).replace(tzinfo=UTC) if args.since else None
+    return asyncio.run(run(symbols, timeframes, since))
 
 
 if __name__ == "__main__":
