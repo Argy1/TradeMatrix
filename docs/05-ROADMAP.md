@@ -56,11 +56,13 @@ Gate 1 passed on 2026-10-03: 17,520 1h candles per coin (2.00 years, no gaps) pl
 
 Goal: a model that is **measured honestly**.
 
-- [ ] Feature builder (docs/03) with the no-leakage test.
-- [ ] Baselines (`naive`, `always_up`) and the metrics module (accuracy, precision/recall, Brier, log loss, simulated return with fees, drawdown, Sharpe).
-- [ ] Walk-forward splitter + tests.
+- [x] Feature builder (docs/03) with the no-leakage test.
+- [x] Baselines (`naive`, `always_up`) and the metrics module (accuracy, precision/recall, Brier, log loss, simulated return with fees, drawdown, Sharpe).
+- [x] Walk-forward splitter + tests.
 - [ ] XGBoost training + calibration; model artifacts to Supabase Storage; `model_versions` rows.
-- [ ] Backtest report generator (`backend/reports/…md`) for each asset/timeframe.
+  - Training and Platt calibration are done (`app/ml/train.py`). Storage upload and `model_versions` rows are still open; they need `SUPABASE_SERVICE_ROLE_KEY`.
+- [x] Backtest report generator (`backend/reports/…md`) for each asset/timeframe.
+  - First run, 2026-10-03, 11 reports: no model beats the baselines with a margin that survives the bootstrap check. On 1h the Brier score equals the base rate, so there is no probability edge. On 4h and pooled 1d the Brier score is significantly worse than the base rate (overconfident). Simulated long-only returns after fees lose money on every coin except XRP 4h, which still trails buy and hold.
 - [ ] `run_predictions` job (idempotent), `resolve_outcomes` job, `worker` service with APScheduler, advisory locks, heartbeat table updates.
 - [ ] Deploy `worker` to Railway (one replica). Predictions appear in the database at every candle close.
 - [ ] Notebook in `backend/notebooks/` that reproduces the report so Argy can read and learn from it.

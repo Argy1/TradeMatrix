@@ -121,7 +121,8 @@ Update this block as work progresses.
 - Last completed task: Phase 1, first slice. `backend/` is scaffolded (uv, FastAPI, ruff, pytest) with the Binance market-data client, candle quality checks, the indicators (SMA, EMA, RSI, MACD, Bollinger, ATR, ADX, OBV), Supabase JWT verification and `/health`; 44 tests pass.
 - Gate 1 passed on 2026-10-03. Candle history is backfilled (129,580 rows, no gaps); the API runs on Railway at https://api-production-a829.up.railway.app (project `tradematrix`, service `api`, Singapore region; deploy with `cd backend && railway up --service api --ci`).
 - GitHub: https://github.com/Argy1/TradeMatrix (private). The first GitHub Actions result has not been checked yet.
-- Next: Phase 2, the prediction engine.
+- Phase 2 so far: features (no-leakage tests), metrics and baselines, walk-forward splitter, XGBoost + Platt calibration, and the backtest CLI `uv run python -m app.ml.backtest` (reports in `backend/reports/`). First result: no model beats the baselines; see docs/05.
+- Waiting on Argy's Gate 2 decision (improve the model first, or proceed with the honest result). Model storage needs `SUPABASE_SERVICE_ROLE_KEY` in the root `.env`.
 - Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) with the init migration (12 tables, RLS on all, 5 assets).
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
 - Known issues:

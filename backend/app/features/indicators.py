@@ -119,6 +119,14 @@ def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
     return pd.DataFrame({"adx": wilder(dx, period), "plus_di": plus_di, "minus_di": minus_di})
 
 
+def stochastic_k(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Stochastic %K, 0-100: where the close sits inside the last `period` candles' range."""
+    lowest = low.astype("float64").rolling(period, min_periods=period).min()
+    highest = high.astype("float64").rolling(period, min_periods=period).max()
+    width = highest - lowest
+    return (100 * (close.astype("float64") - lowest) / width).where(width != 0)
+
+
 def obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     """On-Balance Volume: add volume on up candles, subtract it on down candles."""
     direction = np.sign(close.astype("float64").diff()).fillna(0.0)

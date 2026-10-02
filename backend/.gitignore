@@ -3,3 +3,6 @@
 # (Railway's upload misread the unanchored rule and dropped the app/data package).
 /data/
 /models/
+
+# Backtest prediction dumps are large; the markdown reports are committed.
+/reports/*.csv

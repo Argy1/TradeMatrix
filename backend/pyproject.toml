@@ -6,13 +6,16 @@ dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.142.2",
     "httpx>=0.28.1",
+    "joblib>=1.6.0",
     "numpy>=2.5.3",
     "pandas>=3.0.6",
     "pydantic-settings>=2.15.0",
     "pyjwt[crypto]>=2.15.1",
+    "scikit-learn>=1.9.1",
     "slowapi>=0.1.10",
     "sqlalchemy[asyncio]>=2.1.2",
     "uvicorn[standard]>=0.54.0",
+    "xgboost>=3.4.1",
 ]
 
 [dependency-groups]
