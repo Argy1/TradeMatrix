@@ -41,12 +41,20 @@ def get_engine() -> AsyncEngine | None:
     return _engine
 
 
-async def get_session() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency: one session per request."""
+def session_factory() -> async_sessionmaker[AsyncSession] | None:
+    """A factory for sessions, or None while the database is not configured."""
     engine = get_engine()
     if engine is None:
+        return None
+    return async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    """One session for a unit of work (a request or a job run)."""
+    factory = session_factory()
+    if factory is None:
         raise RuntimeError("DATABASE_URL is not configured")
-    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+    async with factory() as session:
         yield session
 
 

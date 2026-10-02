@@ -9,6 +9,7 @@ from slowapi.util import get_remote_address
 
 from app import db
 from app.api.errors import install_error_handlers
+from app.api.v1 import router as v1_router
 from app.config import get_settings
 
 # About 60 requests per minute per IP on public endpoints (docs/04).
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     install_error_handlers(app)
+    app.include_router(v1_router)
 
     @app.get("/health", tags=["ops"])
     @limiter.exempt
