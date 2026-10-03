@@ -30,9 +30,9 @@ def fake_client(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.parametrize(
     ("path", "status"),
     [
-        ("/v1/predictions/latest?symbol=DOGE&tf=1h", 404),
-        ("/v1/predictions/history?symbol=DOGE&tf=1h", 404),
-        ("/v1/performance?symbol=DOGE", 404),
+        ("/v1/predictions/latest?symbol=NOTACOIN&tf=1h", 404),
+        ("/v1/predictions/history?symbol=NOTACOIN&tf=1h", 404),
+        ("/v1/performance?symbol=NOTACOIN", 404),
         ("/v1/predictions/latest?symbol=BTC&tf=15m", 422),
         ("/v1/predictions/history?symbol=BTC&tf=1h&limit=501", 422),
         ("/v1/performance?days=0", 422),
@@ -91,9 +91,13 @@ def test_real_signal_endpoints(real_client: TestClient) -> None:
     )
 
     markets = real_client.get("/v1/markets").json()
-    assert [m["symbol"] for m in markets] == ["BTC", "ETH", "SOL", "BNB", "XRP"]
+    assert [m["symbol"] for m in markets][:5] == ["BTC", "ETH", "SOL", "BNB", "XRP"]
     assert set(markets[0]["signals"]) == {"1h", "4h", "1d"}
     assert markets[0]["last_price"] and markets[0]["change_24h_pct"] is not None
+
+    summary = real_client.get("/v1/performance/summary?days=30").json()
+    assert len(summary["rows"]) == 3 * len(markets)  # every coin x 1h/4h/1d, in one response
+    assert summary["overall"]["n_predictions"] == sum(r["n_predictions"] for r in summary["rows"])
 
     perf = real_client.get("/v1/performance?days=30").json()
     assert perf["n_predictions"] >= 15

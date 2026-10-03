@@ -48,3 +48,12 @@ export function usePerformance(params: { symbol?: string; tf?: Timeframe; days: 
     refetchInterval: 300_000,
   });
 }
+
+/** Every coin x timeframe in one request (keeps the track-record page under the rate limit). */
+export function usePerformanceSummary(days: number) {
+  return useQuery({
+    queryKey: ["performance-summary", days],
+    queryFn: () => unwrap(api.GET("/v1/performance/summary", { params: { query: { days } } })),
+    refetchInterval: 300_000,
+  });
+}

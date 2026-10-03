@@ -39,8 +39,8 @@ export default function MarketsPage() {
             See which way the market leans before you decide.
           </h1>
           <p className="mt-4.5 max-w-[560px] text-[19px] leading-relaxed text-[#B4C0DC]">
-            For Bitcoin and four other coins, TradeMatrix AI shows the chance the next candle goes up
-            or down, explains why, and proves how past signals performed.
+            For Bitcoin, Ethereum and other major coins, TradeMatrix AI shows the chance the next
+            candle goes up or down, explains why, and proves how past signals performed.
           </p>
           <div className="mt-7 flex flex-wrap gap-3.5">
             <a href="#signals" className="btn-primary inline-flex min-h-12 items-center px-6 text-base">

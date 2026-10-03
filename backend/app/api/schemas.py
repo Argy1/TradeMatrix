@@ -182,3 +182,11 @@ class PerformanceOut(BaseModel):
     brier_baseline: float | None
     by_label: dict[str, LabelStats]
     low_sample: bool
+
+
+class PerformanceSummary(BaseModel):
+    """Every coin x timeframe in one response (the track-record page makes one request)."""
+
+    days: int
+    overall: PerformanceOut
+    rows: list[PerformanceOut]

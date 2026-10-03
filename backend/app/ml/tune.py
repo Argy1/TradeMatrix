@@ -17,14 +17,16 @@ from app import db
 from app.ml.backtest import REPORTS_DIR, load_jobs, run_walk_forward, summarize
 from app.ml.config import DEV_FROM, DEV_UNTIL, candidates
 
-SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
+# The coins the frozen settings were chosen on (2026-10-03). Coins added later reuse those
+# settings; re-tuning on them would need a new development window.
+TUNING_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
 
 
 async def tune(timeframes: list[str]) -> list[dict]:
     rows = []
     try:
         for timeframe in timeframes:
-            jobs = await load_jobs(SYMBOLS, timeframe)
+            jobs = await load_jobs(TUNING_SYMBOLS, timeframe)
             for config in candidates(timeframe):
                 per_job = []
                 for _name, data in jobs:

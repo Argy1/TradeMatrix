@@ -5,8 +5,13 @@ import type { components, paths } from "./schema";
 // The browser only knows the public API URL. Secrets never reach the web app (CLAUDE.md rule 4).
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+// A request stuck on a broken connection would otherwise wait forever (and the page would
+// show its loading skeleton forever). After 15 s it fails, and TanStack Query retries it.
+const fetchWithTimeout: typeof fetch = (input, init) =>
+  fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(15_000) });
+
 /** Typed client generated from the FastAPI OpenAPI schema (`npm run api:types`). */
-export const api = createClient<paths>({ baseUrl: API_BASE_URL });
+export const api = createClient<paths>({ baseUrl: API_BASE_URL, fetch: fetchWithTimeout });
 
 type Schemas = components["schemas"];
 export type Prediction = Schemas["PredictionOut"];

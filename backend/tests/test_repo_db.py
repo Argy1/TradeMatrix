@@ -49,9 +49,11 @@ async def session():
 
 async def test_seeded_assets(session: AsyncSession) -> None:
     assets = await repo.list_assets(session)
-    assert [a.symbol for a in assets] == ["BTC", "ETH", "SOL", "BNB", "XRP"]
+    symbols = [a.symbol for a in assets]
+    assert symbols[:5] == ["BTC", "ETH", "SOL", "BNB", "XRP"]  # the original v1 coins first
+    assert len(symbols) == len(set(symbols)) >= 5
     assert (await repo.get_asset(session, "BTC")).exchange_symbol == "BTCUSDT"
-    assert await repo.get_asset(session, "DOGE") is None
+    assert await repo.get_asset(session, "NOTACOIN") is None
 
 
 async def test_upsert_is_idempotent_and_exact(session: AsyncSession) -> None:

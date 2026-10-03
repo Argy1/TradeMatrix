@@ -144,6 +144,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/performance/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Track Record Summary
+         * @description Live track record for every active coin and timeframe, plus the overall numbers.
+         */
+        get: operations["track_record_summary_v1_performance_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/watchlist": {
         parameters: {
             query?: never;
@@ -412,6 +432,17 @@ export interface components {
             };
             /** Low Sample */
             low_sample: boolean;
+        };
+        /**
+         * PerformanceSummary
+         * @description Every coin x timeframe in one response (the track-record page makes one request).
+         */
+        PerformanceSummary: {
+            /** Days */
+            days: number;
+            overall: components["schemas"]["PerformanceOut"];
+            /** Rows */
+            rows: components["schemas"]["PerformanceOut"][];
         };
         /** PredictionOut */
         PredictionOut: {
@@ -711,6 +742,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PerformanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_record_summary_v1_performance_summary_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceSummary"];
                 };
             };
             /** @description Validation Error */

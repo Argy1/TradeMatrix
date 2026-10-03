@@ -141,7 +141,7 @@ def test_candles_marked_stale_when_the_latest_candle_is_missing(client: TestClie
 @pytest.mark.parametrize(
     ("params", "status", "code"),
     [
-        ({"symbol": "DOGE", "tf": "1h"}, 404, "not_found"),
+        ({"symbol": "NOTACOIN", "tf": "1h"}, 404, "not_found"),
         ({"symbol": "BTC", "tf": "5m"}, 422, "validation_error"),
         ({"symbol": "BTC", "tf": "1h", "limit": 501}, 422, "validation_error"),
         ({"symbol": "BTC", "tf": "1h", "limit": 0}, 422, "validation_error"),

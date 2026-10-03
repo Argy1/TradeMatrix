@@ -75,5 +75,5 @@ def test_each_user_sees_only_their_own_list(client: TestClient) -> None:
 
 
 def test_unknown_coin(client: TestClient) -> None:
-    response = client.put("/v1/watchlist/DOGE", headers=token(str(uuid4())))
+    response = client.put("/v1/watchlist/NOTACOIN", headers=token(str(uuid4())))
     assert response.status_code == 404

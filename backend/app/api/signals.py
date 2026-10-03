@@ -15,6 +15,7 @@ from app.api.schemas import (
     ModelInfo,
     OutcomeOut,
     PerformanceOut,
+    PerformanceSummary,
     PredictionOut,
     ReasonOut,
     RecentAccuracy,
@@ -251,4 +252,62 @@ async def track_record(
         days=days,
         n_predictions=n_predictions,
         **stats,
+    )
+
+
+@router.get("/performance/summary", response_model=PerformanceSummary)
+async def track_record_summary(
+    session: Db, days: Annotated[int, Query(ge=1, le=365)] = 30
+) -> PerformanceSummary:
+    """Live track record for every active coin and timeframe, plus the overall numbers."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    counts = {
+        (symbol, tf): n
+        for symbol, tf, n in await session.execute(
+            text(
+                """
+                select a.symbol, p.timeframe, count(*) from predictions p
+                join assets a on a.id = p.asset_id
+                where p.target_open_time >= :since group by 1, 2
+                """
+            ),
+            {"since": since},
+        )
+    }
+    rows = await session.execute(
+        text(
+            f"""
+            select a.symbol, p.timeframe, p.p_up, p.label, o.actual_direction,
+                   (p.base_close > prev.close) as prev_up
+            from predictions p
+            join assets a on a.id = p.asset_id
+            join prediction_outcomes o on o.prediction_id = p.id
+            left join candles prev on prev.asset_id = p.asset_id
+              and prev.timeframe = p.timeframe and prev.open_time = {_PREVIOUS}
+            where p.target_open_time >= :since
+            """
+        ),
+        {"since": since},
+    )
+    grouped: dict[tuple[str, str], list[Resolved]] = {}
+    everything: list[Resolved] = []
+    for symbol, tf, p_up, label, actual, prev_up in rows:
+        item = Resolved(float(p_up), label, actual, prev_up)
+        grouped.setdefault((symbol, tf), []).append(item)
+        everything.append(item)
+
+    def row(symbol: str | None, tf: str | None, items: list[Resolved], n: int) -> PerformanceOut:
+        return PerformanceOut(
+            symbol=symbol, timeframe=tf, days=days, n_predictions=n, **performance(items)
+        )
+
+    assets = await repo.list_assets(session)
+    return PerformanceSummary(
+        days=days,
+        overall=row(None, None, everything, sum(counts.values())),
+        rows=[
+            row(a.symbol, tf, grouped.get((a.symbol, tf), []), counts.get((a.symbol, tf), 0))
+            for a in assets
+            for tf in TIMEFRAMES
+        ],
     )

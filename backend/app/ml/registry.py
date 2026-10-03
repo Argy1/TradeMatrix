@@ -25,12 +25,10 @@ from app import db
 from app.config import get_settings
 from app.data import repo
 from app.features.build import feature_columns
-from app.ml.backtest import load_jobs, run_walk_forward, summarize
+from app.ml.backtest import active_symbols, load_jobs, run_walk_forward, summarize
 from app.ml.config import EMBARGO, EVAL_FROM, ModelConfig, chosen
 from app.ml.storage import ModelStorage
 from app.ml.train import CalibratedModel, fit_calibrated
-
-SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
 
 
 @dataclass
@@ -162,7 +160,8 @@ async def register(
     return ids
 
 
-async def run(timeframes: list[str]) -> None:
+async def run(timeframes: list[str], symbols: list[str] | None = None) -> None:
+    """Train for `symbols` (default: every active coin). The pooled 1d model always uses all."""
     settings = get_settings()
     storage = ModelStorage(
         settings.supabase_url, settings.supabase_service_role_key, settings.supabase_models_bucket
@@ -173,7 +172,9 @@ async def run(timeframes: list[str]) -> None:
             assets = {a.symbol: a.id for a in await repo.list_assets(session)}
         for timeframe in timeframes:
             config = chosen(timeframe)
-            for name, data in await load_jobs(SYMBOLS, timeframe):
+            everyone = await active_symbols()
+            chosen_symbols = everyone if timeframe == "1d" else (symbols or everyone)
+            for name, data in await load_jobs(chosen_symbols, timeframe):
                 preds, folds = await asyncio.to_thread(
                     run_walk_forward, data, timeframe, config, EVAL_FROM
                 )

@@ -67,6 +67,13 @@ async def load_datasets(symbols: list[str], timeframe: str) -> dict[str, pd.Data
     return datasets
 
 
+async def active_symbols() -> list[str]:
+    """Every active coin in the assets table (the database decides which coins exist)."""
+    factory = db.session_factory()
+    async with factory() as session:
+        return [a.symbol for a in await repo.list_assets(session)]
+
+
 async def load_jobs(symbols: list[str], timeframe: str) -> list[tuple[str, pd.DataFrame]]:
     """One dataset per coin, or one pooled dataset for 1d (too few daily candles per coin)."""
     datasets = await load_datasets(symbols, timeframe)
@@ -278,8 +285,11 @@ def write_report(name: str, timeframe: str, summary: dict, preds: pd.DataFrame) 
 async def run(symbols: list[str], timeframes: list[str]) -> list[tuple[str, str, dict, Path]]:
     results = []
     try:
+        everyone = await active_symbols()
+        symbols = symbols or everyone
         for timeframe in timeframes:
-            jobs = await load_jobs(symbols, timeframe)
+            # The pooled 1d model always learns from every active coin.
+            jobs = await load_jobs(everyone if timeframe == "1d" else symbols, timeframe)
             for name, data in jobs:
                 preds, fold_rows = await asyncio.to_thread(
                     run_walk_forward, data, timeframe, chosen(timeframe), EVAL_FROM
@@ -303,7 +313,7 @@ async def run(symbols: list[str], timeframes: list[str]) -> list[tuple[str, str,
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Walk-forward backtest with honest baselines.")
-    parser.add_argument("--symbols", default="BTC,ETH,SOL,BNB,XRP")
+    parser.add_argument("--symbols", default="", help="default: every active coin")
     parser.add_argument("--timeframes", default="1h,4h,1d")
     args = parser.parse_args()
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]

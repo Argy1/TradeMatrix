@@ -175,7 +175,8 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <nav aria-label="Coin" className="flex flex-wrap gap-2">
+        {/* 16 coins: one horizontally scrollable row instead of three wrapped rows. */}
+        <nav aria-label="Coin" className="-mx-1 flex w-full snap-x gap-2 overflow-x-auto px-1 pb-2">
           {(markets.data ?? []).map((row) => {
             const chip = row.signals[tf];
             const direction = asDirection(chip?.label ?? "neutral");
@@ -184,7 +185,7 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
                 key={row.symbol}
                 href={`/markets/${row.symbol}?tf=${tf}`}
                 aria-current={row.symbol === symbol ? "page" : undefined}
-                className="key flex flex-col px-4 py-2 text-left"
+                className="key flex shrink-0 snap-start flex-col px-4 py-2 text-left"
               >
                 <span className="font-display font-bold">{row.symbol}</span>
                 {chip ? <DirectionLabel direction={direction} size={12} /> : <span className="text-xs text-muted">no signal</span>}
@@ -192,14 +193,14 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
             );
           })}
         </nav>
-        <p role="status" className="ml-auto flex items-center gap-2 text-xs text-muted">
+        <p role="status" className="flex items-center gap-2 text-xs text-muted">
           <span
             aria-hidden
             className={`h-2 w-2 rounded-full ${live.status === "live" ? "bg-up" : live.status === "connecting" ? "bg-neutral" : "bg-down"}`}
           />
           {live.status === "live" ? "Live" : live.status === "connecting" ? "Connecting…" : "Offline, retrying"}
         </p>
-        <span className="text-sm text-muted">Candle size</span>
+        <span className="ml-auto text-sm text-muted">Candle size</span>
         <nav aria-label="Candle size" className="flex gap-2">
           {TIMEFRAMES.map((option) => (
             <Link
