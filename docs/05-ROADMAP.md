@@ -82,14 +82,19 @@ Gate 2 decision, 2026-10-03 (Argy): after one improvement round, 1h beats the ba
 
 Goal: a usable dashboard on Vercel.
 
-- [ ] Scaffold `apps/web` (Next.js, TS strict, Tailwind, shadcn/ui, TanStack Query), theme with the brand: **TradeMatrix AI** + "Created by Argy" under it.
+- [x] Scaffold `apps/web` (Next.js, TS strict, Tailwind, shadcn/ui, TanStack Query), theme with the brand: **TradeMatrix AI** + "Created by Argy" under it.
+  - Next.js 16.3, Tailwind 4, TanStack Query 5, Lightweight Charts 5. shadcn/ui is not used yet: the docs/08 components are custom (glass, keycap, orb), so there was nothing to take from it so far.
 - [ ] Implement the design system from `docs/08-DESIGN.md` first (tokens, glass card, 3D buttons, orb with probability ring, signal card, tiles) and match the design canvas at 1440, 1024, 768 and 390 px (Playwright screenshots).
-- [ ] Generate the typed API client from OpenAPI.
+  - Design system and components done and checked by hand at 1440 and 375 px. The side-by-side comparison with the canvas and the Playwright screenshots are still open.
+- [x] Generate the typed API client from OpenAPI.
+  - `npm run api:types` (openapi-typescript) + openapi-fetch.
 - [ ] Supabase Auth (email + Google), protected routes, session handling.
-- [ ] Markets list page; coin detail page with `lightweight-charts` (candles, volume, EMA/Bollinger/RSI/MACD toggles from API data), timeframe switcher.
-- [ ] Signal card with reasons, valid-until countdown, recent accuracy vs baseline, disclaimer.
-- [ ] WebSocket client: live candle updates + new prediction events, reconnect logic.
-- [ ] Track-record page; About page (how it works, disclaimer, brand line).
+- [x] Markets list page; coin detail page with `lightweight-charts` (candles, volume, EMA/Bollinger/RSI/MACD toggles from API data), timeframe switcher.
+- [x] Signal card with reasons, valid-until countdown, recent accuracy vs baseline, disclaimer.
+  - Plus the degraded warning (Gate 2 decision) and the stale banner. Live accuracy only (docs/06).
+- [x] WebSocket client: live candle updates + new prediction events, reconnect logic.
+  - Backend `/ws/stream`: one upstream Binance market-data connection, fan-out, 5 s prediction polling, ping/idle limits.
+- [x] Track-record page; About page (how it works, disclaimer, brand line).
 - [ ] Watchlist (login). Loading / empty / error states, mobile-responsive layout.
 - [ ] Deploy to Vercel; CORS configured; Sentry added.
 - [ ] Basic tests (vitest for utils/hooks) and a Playwright smoke test of the coin page.

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     binance_ws_url: str = "wss://data-stream.binance.vision"
 
     cors_origins: str = "http://localhost:3000"
+    # Live WebSocket hub in the API (one upstream exchange connection). Off in tests.
+    stream_enabled: bool = True
 
     @property
     def cors_origin_list(self) -> list[str]:

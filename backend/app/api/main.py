@@ -1,5 +1,8 @@
 """FastAPI application. Run with: uv run uvicorn app.api.main:app --reload"""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,11 +13,23 @@ from slowapi.util import get_remote_address
 from app import db
 from app.api.errors import install_error_handlers
 from app.api.signals import router as signals_router
+from app.api.stream import hub
+from app.api.stream import router as stream_router
 from app.api.v1 import router as v1_router
 from app.config import get_settings
 
 # About 60 requests per minute per IP on public endpoints (docs/04).
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Start the live-stream hub with the server and stop it on shutdown."""
+    settings = get_settings()
+    if settings.stream_enabled:
+        await hub.start(settings.binance_ws_url)
+    yield
+    await hub.stop()
 
 
 def create_app() -> FastAPI:
@@ -23,6 +38,7 @@ def create_app() -> FastAPI:
         title="TradeMatrix AI API",
         version="0.1.0",
         description="Market data and probabilistic signals. Not financial advice.",
+        lifespan=lifespan,
     )
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
@@ -35,6 +51,7 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     app.include_router(v1_router)
     app.include_router(signals_router)
+    app.include_router(stream_router)
 
     @app.get("/health", tags=["ops"])
     @limiter.exempt

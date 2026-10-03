@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 
 import { ApiError, type HistoryItem, TIMEFRAMES, type Timeframe } from "@/lib/api/client";
 import { useCandles, useHistory, useLatestPrediction, useMarkets } from "@/lib/api/hooks";
+import { useLiveStream } from "@/lib/api/live";
 import { DISCLAIMER_SHORT } from "@/lib/copy";
 import { formatDateTime, timeframeWords } from "@/lib/format";
 import { asDirection } from "@/lib/signal";
@@ -121,6 +122,7 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
   const markets = useMarkets();
   const prediction = useLatestPrediction(symbol, tf);
   const candles = useCandles(symbol, tf, 200);
+  const live = useLiveStream(symbol, tf, 200);
   const history = useHistory(symbol, tf, 12);
   const coin = markets.data?.find((row) => row.symbol === symbol);
   const name = coin?.name ?? symbol;
@@ -155,7 +157,14 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
             );
           })}
         </nav>
-        <nav aria-label="Candle size" className="ml-auto flex gap-2">
+        <p role="status" className="ml-auto flex items-center gap-2 text-xs text-muted">
+          <span
+            aria-hidden
+            className={`h-2 w-2 rounded-full ${live.status === "live" ? "bg-up" : live.status === "connecting" ? "bg-neutral" : "bg-down"}`}
+          />
+          {live.status === "live" ? "Live" : live.status === "connecting" ? "Connecting…" : "Offline, retrying"}
+        </p>
+        <nav aria-label="Candle size" className="flex gap-2">
           {TIMEFRAMES.map((option) => (
             <Link
               key={option}
@@ -186,7 +195,14 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
               onRetry={() => prediction.refetch()}
             />
           ) : (
-            <SignalCard prediction={prediction.data} coinName={name} />
+            <>
+              {live.updating && (
+                <p role="status" className="glass mb-3 p-4 text-sm text-cyan">
+                  Updating signal… the candle just closed.
+                </p>
+              )}
+              <SignalCard prediction={prediction.data} coinName={name} />
+            </>
           )}
         </div>
 

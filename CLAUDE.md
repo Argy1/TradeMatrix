@@ -78,7 +78,7 @@ TradeMatrix/
 ## Commands (fill in the exact ones when you scaffold each part)
 
 - Backend: `cd backend && uv run pytest` / `uv run ruff check .` / `uv run uvicorn app.api.main:app --reload` / `uv run python -m app.worker.main` (the worker arrives in Phase 2). `uv run pytest -m live` runs the one test that calls the real exchange.
-- Web: `cd apps/web && npm run dev` / `npm run lint` / `npm test`
+- Web: `cd apps/web && npm run dev` / `npm run lint` / `npm test` / `npm run typecheck` / `npm run api:types` (regenerate API types after backend changes)
 - Mobile: `cd apps/mobile && flutter run` / `flutter analyze` / `flutter test`
 - Database: `npx supabase db push` (apply `supabase/migrations`). The Supabase CLI runs through `npx`, there is no global install. While the CLI is logged in to a different Supabase account, apply migrations through the Supabase connector or with `npx supabase db push --db-url <session pooler URL>`.
 - Gate 0 check: `uv run scripts/gate0_check.py` (from the repo root; reads the root `.env`)
@@ -120,7 +120,8 @@ Update this block as work progresses.
 
 - Current phase: **Phase 3 — Web MVP** (see docs/05-ROADMAP.md). Gates 0, 1 and 2 passed on 2026-10-03 (Gate 2 by Argy's decision, see docs/05).
 - Last completed task: Phase 2. Live models in the private `models` bucket and `model_versions` (1h BTC/ETH/BNB/XRP `ok`, the rest `degraded`); the Railway `worker` ingests, predicts and resolves outcomes every hour; notebook `backend/notebooks/01_backtest_walkthrough.ipynb`.
-- Next: Phase 3. First the API endpoints the web needs (`/v1/markets`, `/v1/predictions/latest`, `/v1/predictions/history`, `/v1/performance`), then `apps/web`.
+- Phase 3 so far: signal endpoints and `/ws/stream` in the API; `apps/web` with the design system, markets home, coin page (chart, live updates, signal card), track record and About. Run locally with `cd apps/web && npm run dev` (reads `apps/web/.env.local`).
+- Next in Phase 3: Supabase Auth + watchlist, Vercel deploy (needs Argy's OK), Sentry (needs an account), canvas comparison + Playwright smoke test.
 - Open question for Argy: the pooled 1d model's calibration fell back to the base rate, so it currently gives every coin the same 58.2% Up (flagged `degraded`).
 - Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1). Railway: project `tradematrix`, services `api` (https://api-production-a829.up.railway.app) and `worker`. GitHub: https://github.com/Argy1/TradeMatrix (private).
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
