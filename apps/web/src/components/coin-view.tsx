@@ -1,14 +1,13 @@
 "use client";
 
-import { X } from "lucide-react";
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
 
-import { ApiError, type HistoryItem, TIMEFRAMES, type Timeframe } from "@/lib/api/client";
+import { ApiError, type Candle, type HistoryItem, TIMEFRAMES, type Timeframe } from "@/lib/api/client";
 import { useCandles, useHistory, useLatestPrediction, useMarkets } from "@/lib/api/hooks";
 import { useLiveStream } from "@/lib/api/live";
 import { DISCLAIMER_SHORT } from "@/lib/copy";
-import { formatDateTime, timeframeWords } from "@/lib/format";
+import { formatChange, formatDateTime, formatPrice, timeframeWords } from "@/lib/format";
 import { asDirection } from "@/lib/signal";
 
 import { DIRECTION_TEXT, DirectionIcon, DirectionLabel } from "./direction";
@@ -58,32 +57,64 @@ function GuideStrip() {
       </button>
     );
   const steps = [
-    ["Direction", "Up, Down or Neutral for the next candle. Neutral means too close to call."],
-    ["Chance", "How likely that direction is. 58% is a lean, not a promise."],
-    ["Reliability", "How the model did on recent candles, next to a simple baseline."],
+    ["Direction.", "Up, Down or Neutral: where the next candle is more likely to close."],
+    ["Chance.", "The percentage is a probability, not a promise. 58% means about 58 out of 100 similar cases."],
+    ["Reliability.", "Check how often past signals were right and compare with a simple baseline."],
   ];
   return (
-    <section aria-label="How to read a signal" className="glass relative grid gap-4 p-5 md:grid-cols-3">
-      <button
-        type="button"
-        onClick={() => remember(true)}
-        aria-label="Hide the guide"
-        className="absolute right-3 top-3 rounded-lg p-1 text-muted hover:text-fg"
-      >
-        <X size={18} aria-hidden />
-      </button>
-      {steps.map(([title, text], index) => (
-        <div key={title} className="flex gap-3 pr-6">
-          <span className="key grid h-8 w-8 shrink-0 place-items-center font-display font-bold">
-            {index + 1}
-          </span>
-          <div>
-            <p className="font-semibold">{title}</p>
-            <p className="text-sm text-muted">{text}</p>
-          </div>
-        </div>
-      ))}
+    <section aria-labelledby="guide" className="glass space-y-4 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="guide" className="font-display text-lg font-semibold">New here? Read a signal in 3 steps</h2>
+        <button type="button" onClick={() => remember(true)} className="key inline-flex min-h-11 items-center px-4 text-sm font-semibold">
+          Got it, hide
+        </button>
+      </div>
+      <ol className="grid gap-4 md:grid-cols-3">
+        {steps.map(([title, text], index) => (
+          <li key={title} className="flex gap-3">
+            <span className="key grid h-9 w-9 shrink-0 place-items-center font-display font-bold">{index + 1}</span>
+            <p className="text-sm text-fg-2">
+              <strong className="text-fg">{title}</strong> {text}
+            </p>
+          </li>
+        ))}
+      </ol>
     </section>
+  );
+}
+
+function ChartHeader({ name, symbol, candles, change }: { name: string; symbol: string; candles: Candle[]; change: number | null }) {
+  if (candles.length === 0) return null;
+  const last = candles.at(-1)!;
+  // Compare as numbers only to find the extremes; show the original exact strings.
+  const high = candles.reduce((a, b) => (Number(b.h) > Number(a.h) ? b : a)).h;
+  const low = candles.reduce((a, b) => (Number(b.l) < Number(a.l) ? b : a)).l;
+  return (
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p className="font-display text-lg font-bold">
+          {name} <span className="font-sans text-sm font-normal text-muted">{symbol} / USDT</span>
+        </p>
+        <p className="font-mono text-2xl font-bold">
+          {formatPrice(last.c)}{" "}
+          {change !== null && (
+            <span className={`text-sm ${change >= 0 ? "text-up" : "text-down-fg"}`}>
+              {formatChange(change)} <span className="font-sans font-normal text-muted">24h</span>
+            </span>
+          )}
+        </p>
+      </div>
+      <dl className="flex gap-6 text-sm">
+        <div>
+          <dt className="text-muted">Period high</dt>
+          <dd className="font-mono font-semibold">{formatPrice(high)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted">Period low</dt>
+          <dd className="font-mono font-semibold">{formatPrice(low)}</dd>
+        </div>
+      </dl>
+    </div>
   );
 }
 
@@ -168,6 +199,7 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
           />
           {live.status === "live" ? "Live" : live.status === "connecting" ? "Connecting…" : "Offline, retrying"}
         </p>
+        <span className="text-sm text-muted">Candle size</span>
         <nav aria-label="Candle size" className="flex gap-2">
           {TIMEFRAMES.map((option) => (
             <Link
@@ -218,19 +250,43 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
               <ErrorState message="Could not load the chart." onRetry={() => candles.refetch()} />
             ) : (
               <>
+                <ChartHeader
+                  name={name}
+                  symbol={symbol}
+                  candles={candles.data.candles}
+                  change={coin?.change_24h_pct ?? null}
+                />
                 {candles.data.stale && <p className="mb-3 text-sm text-neutral">Data is delayed. Signals may be out of date.</p>}
-                <PriceChart candles={candles.data.candles} />
+                <PriceChart
+                  candles={candles.data.candles}
+                  next={
+                    prediction.data
+                      ? {
+                          label: prediction.data.label,
+                          pUp: prediction.data.p_up,
+                          degraded: prediction.data.model.status === "degraded",
+                          targetOpenTime: prediction.data.target_open_time,
+                        }
+                      : null
+                  }
+                />
               </>
             )}
           </section>
 
           <section aria-labelledby="recent" className="glass space-y-4 p-6">
-            <h2 id="recent" className="font-display text-lg font-semibold">Recent signals</h2>
+            <div>
+              <h2 id="recent" className="font-display text-lg font-semibold">Recent {tf} signals</h2>
+              <p className="text-sm text-muted">
+                Newest first. Hit means the candle closed the way we said. Skip means the odds were
+                too close, so we made no call.
+              </p>
+            </div>
             {history.data ? <RecentSignals items={history.data.items} /> : <Skeleton className="h-24" />}
           </section>
 
           <section aria-labelledby="news" className="glass space-y-2 p-6">
-            <h2 id="news" className="font-display text-lg font-semibold">News</h2>
+            <h2 id="news" className="font-display text-lg font-semibold">News tone for {name}</h2>
             <p className="text-sm text-muted">Headlines with a sentiment badge arrive in the next update.</p>
           </section>
         </div>

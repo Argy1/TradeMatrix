@@ -84,8 +84,8 @@ Goal: a usable dashboard on Vercel.
 
 - [x] Scaffold `apps/web` (Next.js, TS strict, Tailwind, shadcn/ui, TanStack Query), theme with the brand: **TradeMatrix AI** + "Created by Argy" under it.
   - Next.js 16.3, Tailwind 4, TanStack Query 5, Lightweight Charts 5. shadcn/ui is not used yet: the docs/08 components are custom (glass, keycap, orb), so there was nothing to take from it so far.
-- [ ] Implement the design system from `docs/08-DESIGN.md` first (tokens, glass card, 3D buttons, orb with probability ring, signal card, tiles) and match the design canvas at 1440, 1024, 768 and 390 px (Playwright screenshots).
-  - Design system and components done and checked by hand at 1440 and 375 px. The side-by-side comparison with the canvas and the Playwright screenshots are still open.
+- [x] Implement the design system from `docs/08-DESIGN.md` first (tokens, glass card, 3D buttons, orb with probability ring, signal card, tiles) and match the design canvas at 1440, 1024, 768 and 390 px (Playwright screenshots).
+  - Compared with the canvas on 2026-10-03 and aligned: hero copy and 3D scene (badge shows the live BTC 1h signal, not sample data), one-table signals list, How-it-works tiles, track-record panel, active nav, guide strip copy, chart header with period high/low, NEXT ghost column, section subtitles. Kept docs/08 where the canvas differed: the docs/06 disclaimer text, a probability on Neutral chips, footer brand lockup. Playwright checks 1440/1024/768/390 px.
 - [x] Generate the typed API client from OpenAPI.
   - `npm run api:types` (openapi-typescript) + openapi-fetch.
 - [x] Supabase Auth (email + Google), protected routes, session handling.

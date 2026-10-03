@@ -5,7 +5,7 @@ const WIDTHS = [1440, 1024, 768, 390];
 
 test("markets home lists every coin with its signals", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Crypto signals that show their odds" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "See which way the market leans before you decide." })).toBeVisible();
   for (const symbol of ["BTC", "ETH", "SOL", "BNB", "XRP"]) {
     await expect(page.getByRole("link", { name: new RegExp(`^${symbol}`) }).first()).toBeVisible();
   }

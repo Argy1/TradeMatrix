@@ -20,7 +20,7 @@ export function AuthButtons() {
         </span>
         <button
           type="button"
-          className="key px-4 py-2.5 font-semibold"
+          className="key inline-flex min-h-11 items-center px-4 font-semibold"
           onClick={async () => {
             await supabaseBrowser().auth.signOut();
             router.push("/");
@@ -34,10 +34,10 @@ export function AuthButtons() {
 
   return (
     <div className="flex items-center gap-3 text-sm">
-      <Link href="/login" className="key px-4 py-2.5 font-semibold text-fg">
+      <Link href="/login" className="key inline-flex min-h-11 items-center px-4 font-semibold text-fg">
         Sign in
       </Link>
-      <Link href="/login?mode=signup" className="btn-primary hidden px-4 py-2.5 sm:inline-block">
+      <Link href="/login?mode=signup" className="btn-primary hidden min-h-11 items-center px-4 sm:inline-flex">
         Create free account
       </Link>
     </div>

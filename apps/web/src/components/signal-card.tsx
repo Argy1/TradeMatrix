@@ -101,23 +101,31 @@ function Meter({ pUp }: { pUp: number }) {
         <span className="absolute right-0">100%</span>
       </div>
       <p className="mt-1 text-center text-xs text-muted">Neutral zone: too close to call</p>
+      <p className="mt-2 text-center text-sm text-fg-2">
+        Chance of going up: <strong className="font-mono text-fg">{formatProbability(pUp)}</strong>
+      </p>
     </div>
   );
 }
 
-function Reliability({ prediction }: { prediction: Prediction }) {
+function Reliability({ prediction, symbol }: { prediction: Prediction; symbol: string }) {
   const { model, naive_baseline: naive, n, low_sample: lowSample } = prediction.recent_accuracy;
   const scale = (value: number) => `${Math.min(Math.max((value - 0.4) / 0.2, 0), 1) * 100}%`;
   return (
     <section aria-labelledby="reliability" className="space-y-3">
-      <h3 id="reliability" className="font-display text-base font-semibold">
-        How reliable is it?
-      </h3>
+      <div>
+        <h3 id="reliability" className="font-display text-base font-semibold">
+          How reliable is it?
+        </h3>
+        <p className="text-xs text-muted">
+          Real results from the last {n} finished {prediction.timeframe} signals for {symbol}.
+        </p>
+      </div>
       {model != null && naive != null && (
         <div className="space-y-2 text-sm">
           {[
-            { label: "This model", value: model, color: "#4DD8FF" },
-            { label: 'Baseline ("repeat the last move")', value: naive, color: "#9AA8C7" },
+            { label: "TradeMatrix model", value: model, color: "#4DD8FF" },
+            { label: "Simple baseline: repeat the last move", value: naive, color: "#9AA8C7" },
           ].map((bar) => (
             <div key={bar.label}>
               <div className="flex justify-between text-fg-2">
@@ -211,9 +219,12 @@ export function SignalCard({
         </p>
 
         <section aria-labelledby="why" className="space-y-3">
-          <h3 id="why" className="font-display text-base font-semibold">
-            Why this signal
-          </h3>
+          <div>
+            <h3 id="why" className="font-display text-base font-semibold">
+              Why this signal
+            </h3>
+            <p className="text-xs text-muted">The three things that mattered most, in plain words.</p>
+          </div>
           <ul className="space-y-3">
             {prediction.reasons.map((reason) => {
               const effect = asDirection(reason.effect === "none" ? "neutral" : reason.effect);
@@ -240,7 +251,7 @@ export function SignalCard({
           </ul>
         </section>
 
-        <Reliability prediction={prediction} />
+        <Reliability prediction={prediction} symbol={prediction.symbol} />
 
         <p className="rounded-2xl border border-neutral/40 bg-neutral/10 p-4 text-sm leading-relaxed text-fg-2">
           {DISCLAIMER}

@@ -13,9 +13,10 @@ export function timeframeWords(tf: Timeframe): string {
 
 /** Prices arrive as exact strings; show thousands separators without float rounding. */
 export function formatPrice(value: string, { dollar = true } = {}): string {
-  const [whole, fraction] = value.split(".");
+  const [whole, fraction = ""] = value.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const decimals = fraction ? fraction.padEnd(2, "0") : "00";
+  // Exchanges send "84536.00000000": drop trailing zeros but keep at least 2 decimals.
+  const decimals = fraction.replace(/0+$/, "").padEnd(2, "0");
   return `${dollar ? "$" : ""}${grouped}.${decimals}`;
 }
 

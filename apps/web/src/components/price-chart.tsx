@@ -7,6 +7,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   LineSeries,
+  type Logical,
   LineStyle,
   type SeriesType,
   type Time,
@@ -16,7 +17,19 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { Candle } from "@/lib/api/client";
-import { DISPLAY_TIME_ZONE } from "@/lib/format";
+import { DISPLAY_TIME_ZONE, formatProbability } from "@/lib/format";
+import { asDirection, shownProbability } from "@/lib/signal";
+
+import { DirectionIcon } from "./direction";
+
+/** The current signal, drawn as a dashed "NEXT" column where the next candle will appear. */
+export type NextSignal = { label: string; pUp: number; degraded: boolean; targetOpenTime: string };
+
+const GHOST = {
+  up: { color: "#2EE6A6", tint: "rgba(46,230,166,.12)" },
+  down: { color: "#FF8FA3", tint: "rgba(255,92,122,.12)" },
+  neutral: { color: "#FFC857", tint: "rgba(255,200,87,.12)" },
+} as const;
 
 type Overlay = "ema" | "bollinger" | "rsi" | "macd";
 type LineKey = "ema9" | "ema21" | "ema50" | "bb_upper" | "bb_mid" | "bb_lower" | "rsi14" | "macd" | "macd_signal";
@@ -77,10 +90,14 @@ function fill(built: Built, candles: Candle[]) {
 }
 
 /** Candles + volume + indicator overlays. Every number comes from the API (clients are thin). */
-export function PriceChart({ candles }: { candles: Candle[] }) {
+export function PriceChart({ candles, next = null }: { candles: Candle[]; next?: NextSignal | null }) {
   const container = useRef<HTMLDivElement>(null);
   const built = useRef<Built | null>(null);
   const latest = useRef(candles);
+  const placeGhost = useRef<() => void>(() => {});
+  const target = useRef<string | null>(next?.targetOpenTime ?? null);
+  // x = centre of the next (empty) candle slot, h = height of the price pane, in pixels.
+  const [ghost, setGhost] = useState<{ x: number; h: number } | null>(null);
   const [overlays, setOverlays] = useState<Record<Overlay, boolean>>({
     ema: true,
     bollinger: false,
@@ -91,6 +108,12 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
   useEffect(() => {
     latest.current = candles;
   }, [candles]);
+
+  useEffect(() => {
+    target.current = next?.targetOpenTime ?? null;
+    const frame = requestAnimationFrame(() => placeGhost.current());
+    return () => cancelAnimationFrame(frame);
+  }, [next?.targetOpenTime]);
 
   // Build the chart when it mounts or when the overlays change.
   useEffect(() => {
@@ -169,10 +192,36 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
       line("macd_signal", "#FFC857", pane);
     }
     chart.panes().forEach((p, index) => p.setStretchFactor(index === 0 ? 3 : 1));
+    // Leave a few empty slots on the right so the NEXT column has room.
+    chart.timeScale().applyOptions({ rightOffset: 6 });
 
     built.current = { chart, price, volume, lines, macdHist, fitted: false };
     fill(built.current, latest.current);
+
+    // Keep the NEXT column glued to the slot after the last candle while scrolling/zooming.
+    const place = () => {
+      const count = latest.current.length;
+      // The predicted candle may already be on the chart (forming, from the live stream);
+      // otherwise it is the empty slot right after the last closed candle.
+      const index = latest.current.findIndex((c) => c.t === target.current);
+      const slot = index >= 0 ? index : count;
+      const scale = chart.timeScale();
+      let x: number | null = count ? scale.logicalToCoordinate(slot as Logical) : null;
+      if (x === null && count) {
+        // The library cannot place an empty slot past the data, so step one bar from the last candle.
+        const lastX = scale.logicalToCoordinate((count - 1) as Logical);
+        if (lastX !== null) x = lastX + scale.options().barSpacing * (slot - (count - 1));
+      }
+      setGhost(x === null ? null : { x, h: chart.panes()[0]?.getHeight() ?? 0 });
+    };
+    placeGhost.current = place;
+    chart.timeScale().subscribeVisibleLogicalRangeChange(place);
+    chart.timeScale().subscribeSizeChange(place);
+    const frame = requestAnimationFrame(place);
     return () => {
+      cancelAnimationFrame(frame);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(place);
+      chart.timeScale().unsubscribeSizeChange(place);
       chart.remove();
       built.current = null;
     };
@@ -180,8 +229,13 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
 
   // New data (refetch or live candle): update the series, never rebuild the chart.
   useEffect(() => {
-    if (built.current) fill(built.current, candles);
+    if (!built.current) return;
+    fill(built.current, candles);
+    const frame = requestAnimationFrame(() => placeGhost.current());
+    return () => cancelAnimationFrame(frame);
   }, [candles]);
+
+  const direction = next ? asDirection(next.label) : null;
 
   const height = 380 + (overlays.rsi ? 110 : 0) + (overlays.macd ? 110 : 0);
 
@@ -200,12 +254,31 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
           </button>
         ))}
       </div>
-      <div
-        ref={container}
-        style={{ height }}
-        role="img"
-        aria-label="Price chart with candles, volume and the selected indicators"
-      />
+      <div className="relative overflow-hidden">
+        <div
+          ref={container}
+          style={{ height }}
+          role="img"
+          aria-label="Price chart with candles, volume and the selected indicators"
+        />
+        {next && direction && ghost && ghost.x > 24 && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-0 flex w-12 -translate-x-1/2 flex-col items-center gap-1 rounded-lg border-2 border-dashed pt-2 text-[11px] font-bold"
+            style={{
+              left: ghost.x,
+              height: ghost.h,
+              borderColor: GHOST[direction].color,
+              background: GHOST[direction].tint,
+              color: GHOST[direction].color,
+            }}
+          >
+            <DirectionIcon direction={direction} size={16} />
+            <span className="font-mono">{formatProbability(shownProbability(direction, next.pUp))}</span>
+            <span className="tracking-wider">NEXT</span>
+          </div>
+        )}
+      </div>
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" aria-label="Legend">
         <li><span className="text-up">▲ green candle</span>: closed higher</li>
         <li><span className="text-down-fg">▼ red candle</span>: closed lower</li>
@@ -220,6 +293,7 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
         {overlays.rsi && <li><span className="text-ema21">RSI 14</span> (lines at 30 and 70)</li>}
         {overlays.macd && <li>MACD (12, 26, 9)</li>}
         <li>White dashed line: last price</li>
+        {next && <li>Dashed NEXT column: the signal for the candle that has not started yet</li>}
       </ul>
     </div>
   );

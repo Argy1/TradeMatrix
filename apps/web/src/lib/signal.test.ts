@@ -50,6 +50,8 @@ describe("formatting", () => {
     expect(formatPrice("84518.01")).toBe("$84,518.01");
     expect(formatPrice("1.4847")).toBe("$1.4847");
     expect(formatPrice("84460")).toBe("$84,460.00");
+    expect(formatPrice("84536.00000000")).toBe("$84,536.00");
+    expect(formatPrice("1.48470000")).toBe("$1.4847");
   });
 
   it("shows one decimal for probabilities", () => {
