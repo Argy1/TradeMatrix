@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AuthButtons } from "./auth-buttons";
 import { Brand } from "./brand";
 
 const NAV = [
@@ -24,14 +25,7 @@ export function Header() {
           ))}
         </ul>
       </nav>
-      <div className="flex items-center gap-3 text-sm">
-        <Link href="/login" className="key px-4 py-2.5 font-semibold text-fg">
-          Sign in
-        </Link>
-        <Link href="/login?mode=signup" className="btn-primary hidden px-4 py-2.5 sm:inline-block">
-          Create free account
-        </Link>
-      </div>
+      <AuthButtons />
     </header>
   );
 }

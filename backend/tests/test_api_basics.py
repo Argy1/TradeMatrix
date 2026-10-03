@@ -29,3 +29,9 @@ def test_openapi_schema_is_served() -> None:
     schema = client.get("/openapi.json").json()
     assert schema["info"]["title"] == "TradeMatrix AI API"
     assert "/health" in schema["paths"]
+
+
+def test_sentry_stays_off_without_a_dsn() -> None:
+    from app.observability import init_sentry
+
+    assert init_sentry("api") is False

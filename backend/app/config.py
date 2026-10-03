@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "development"
+    sentry_dsn: str = ""  # error tracking; empty = off
 
     # Supabase pooled connection string in SQLAlchemy form: postgresql+asyncpg://...
     database_url: str = ""
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
     binance_ws_url: str = "wss://data-stream.binance.vision"
 
     cors_origins: str = "http://localhost:3000"
+    cors_origin_regex: str = ""
     # Live WebSocket hub in the API (one upstream exchange connection). Off in tests.
     stream_enabled: bool = True
 

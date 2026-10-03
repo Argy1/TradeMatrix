@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.data.exchanges import get_exchange_client
 from app.ml.predict import ModelCache
 from app.ml.storage import ModelStorage
+from app.observability import init_sentry
 from app.timeframes import TIMEFRAMES
 from app.worker.jobs import candle_close, heartbeat_work, log, run_job
 
@@ -27,6 +28,7 @@ async def main() -> None:
     # stdout, not stderr: Railway shows stderr lines as errors.
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
     settings = get_settings()
+    init_sentry("worker")
     client = get_exchange_client(settings)
     storage = ModelStorage(
         settings.supabase_url, settings.supabase_service_role_key, settings.supabase_models_bucket

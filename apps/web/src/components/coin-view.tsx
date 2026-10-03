@@ -15,6 +15,7 @@ import { DIRECTION_TEXT, DirectionIcon, DirectionLabel } from "./direction";
 import { PriceChart } from "./price-chart";
 import { SignalCard } from "./signal-card";
 import { ErrorState, Skeleton } from "./states";
+import { WatchToggle } from "./watchlist-view";
 
 const GUIDE_KEY = "tm-guide-hidden";
 const GUIDE_EVENT = "tm-guide-change";
@@ -137,6 +138,9 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
           A probability for the next {timeframeWords(tf)} candle, the reasons behind it, and how
           reliable it has been. {DISCLAIMER_SHORT}
         </p>
+        <div className="mt-4">
+          <WatchToggle symbol={symbol} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

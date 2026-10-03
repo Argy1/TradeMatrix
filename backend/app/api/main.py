@@ -11,12 +11,14 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from app import db
+from app.api.account import router as account_router
 from app.api.errors import install_error_handlers
 from app.api.signals import router as signals_router
 from app.api.stream import hub
 from app.api.stream import router as stream_router
 from app.api.v1 import router as v1_router
 from app.config import get_settings
+from app.observability import init_sentry
 
 # About 60 requests per minute per IP on public endpoints (docs/04).
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
@@ -34,6 +36,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    init_sentry("api")
     app = FastAPI(
         title="TradeMatrix AI API",
         version="0.1.0",
@@ -45,6 +48,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
+        # Vercel preview deployments get random URLs; this pattern allows only our own project.
+        allow_origin_regex=settings.cors_origin_regex or None,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
@@ -52,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(v1_router)
     app.include_router(signals_router)
     app.include_router(stream_router)
+    app.include_router(account_router)
 
     @app.get("/health", tags=["ops"])
     @limiter.exempt
