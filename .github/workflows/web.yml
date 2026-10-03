@@ -1,0 +1,31 @@
+name: web
+
+on:
+  push:
+    paths: ["apps/web/**", ".github/workflows/web.yml"]
+  pull_request:
+    paths: ["apps/web/**", ".github/workflows/web.yml"]
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      # Public values only; the build does not need any secret.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api-production-a829.up.railway.app
+          NEXT_PUBLIC_WS_URL: wss://api-production-a829.up.railway.app

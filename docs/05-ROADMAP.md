@@ -88,15 +88,18 @@ Goal: a usable dashboard on Vercel.
   - Design system and components done and checked by hand at 1440 and 375 px. The side-by-side comparison with the canvas and the Playwright screenshots are still open.
 - [x] Generate the typed API client from OpenAPI.
   - `npm run api:types` (openapi-typescript) + openapi-fetch.
-- [ ] Supabase Auth (email + Google), protected routes, session handling.
+- [x] Supabase Auth (email + Google), protected routes, session handling.
+  - Email + password with email confirmation (PKCE, `/auth/callback`), session refresh in `src/proxy.ts`. Google sign-in postponed by Argy (needs his own Google Cloud OAuth client).
 - [x] Markets list page; coin detail page with `lightweight-charts` (candles, volume, EMA/Bollinger/RSI/MACD toggles from API data), timeframe switcher.
 - [x] Signal card with reasons, valid-until countdown, recent accuracy vs baseline, disclaimer.
   - Plus the degraded warning (Gate 2 decision) and the stale banner. Live accuracy only (docs/06).
 - [x] WebSocket client: live candle updates + new prediction events, reconnect logic.
   - Backend `/ws/stream`: one upstream Binance market-data connection, fan-out, 5 s prediction polling, ping/idle limits.
 - [x] Track-record page; About page (how it works, disclaimer, brand line).
-- [ ] Watchlist (login). Loading / empty / error states, mobile-responsive layout.
+- [x] Watchlist (login). Loading / empty / error states, mobile-responsive layout.
+  - `/v1/watchlist` (JWT, scoped to the token's user) + `/watchlist` page and a watch toggle on the coin page.
 - [ ] Deploy to Vercel; CORS configured; Sentry added.
+  - Vercel: https://tradematrix-rho.vercel.app (project `tradematrix`, root `apps/web`, auto-deploys on push to `main`, functions in sin1). CORS on the API allows it plus this project's preview URLs. Sentry is wired in web, api and worker but stays off until Argy creates the account and adds the DSNs.
 - [ ] Basic tests (vitest for utils/hooks) and a Playwright smoke test of the coin page.
 
 **Gate 3:** the live site shows real signals and a live chart; signals are logged for 7 days with no missed runs; `/v1/status` shows fresh jobs.
