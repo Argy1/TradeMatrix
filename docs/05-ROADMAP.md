@@ -98,9 +98,10 @@ Goal: a usable dashboard on Vercel.
 - [x] Track-record page; About page (how it works, disclaimer, brand line).
 - [x] Watchlist (login). Loading / empty / error states, mobile-responsive layout.
   - `/v1/watchlist` (JWT, scoped to the token's user) + `/watchlist` page and a watch toggle on the coin page.
-- [ ] Deploy to Vercel; CORS configured; Sentry added.
-  - Vercel: https://tradematrix-rho.vercel.app (project `tradematrix`, root `apps/web`, auto-deploys on push to `main`, functions in sin1). CORS on the API allows it plus this project's preview URLs. Sentry is wired in web, api and worker but stays off until Argy creates the account and adds the DSNs.
-- [ ] Basic tests (vitest for utils/hooks) and a Playwright smoke test of the coin page.
+- [x] Deploy to Vercel; CORS configured; Sentry added.
+  - Vercel: https://tradematrix-rho.vercel.app (project `tradematrix`, root `apps/web`, auto-deploys on push to `main`, functions in sin1). CORS on the API allows it plus this project's preview URLs. Sentry live on 2026-10-03: projects `tradematrix-web` (Vercel `NEXT_PUBLIC_SENTRY_DSN`) and `tradematrix-backend` (Railway `SENTRY_DSN` on api + worker); errors + 10% tracing, no personal data. Local development keeps Sentry off.
+- [x] Basic tests (vitest for utils/hooks) and a Playwright smoke test of the coin page.
+  - `npm test` (vitest) and `npm run test:e2e` (Playwright; `PW_CHANNEL=chrome` locally, `BASE_URL=...` against a deployed site).
 
 **Gate 3:** the live site shows real signals and a live chart; signals are logged for 7 days with no missed runs; `/v1/status` shows fresh jobs.
 

@@ -122,7 +122,8 @@ Update this block as work progresses.
 - Last completed task: Phase 2. Live models in the private `models` bucket and `model_versions` (1h BTC/ETH/BNB/XRP `ok`, the rest `degraded`); the Railway `worker` ingests, predicts and resolves outcomes every hour; notebook `backend/notebooks/01_backtest_walkthrough.ipynb`.
 - Phase 3 so far: signal endpoints and `/ws/stream` in the API; `apps/web` with the design system, markets home, coin page (chart, live updates, signal card), track record and About. Run locally with `cd apps/web && npm run dev` (reads `apps/web/.env.local`).
 - Web is live at https://tradematrix-rho.vercel.app (Vercel project `tradematrix`, auto-deploys on push to `main`). Email login + watchlist done; Google sign-in later.
-- Next in Phase 3: Sentry DSNs from Argy, Supabase Auth URL settings by Argy (Site URL + redirect URLs), canvas comparison, Playwright smoke test in CI; then Gate 3 (7 days of logged signals with no missed runs).
+- Sentry is live (web + api + worker). Supabase Auth Site URL set by Argy.
+- Next in Phase 3: Argy tests sign-up + watchlist on the live site; canvas comparison; then Gate 3 (7 days of logged signals with no missed runs, earliest 2026-10-10).
 - Open question for Argy: the pooled 1d model's calibration fell back to the base rate, so it currently gives every coin the same 58.2% Up (flagged `degraded`).
 - Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1). Railway: project `tradematrix`, services `api` (https://api-production-a829.up.railway.app) and `worker`. GitHub: https://github.com/Argy1/TradeMatrix (private).
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
