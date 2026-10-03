@@ -38,3 +38,6 @@ build/
 Thumbs.db
 .idea/
 .vscode/
+
+# local editor / preview settings
+supabase/.claude/

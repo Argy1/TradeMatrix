@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+/*
+ * "Matrix Glass" design tokens (docs/08-DESIGN.md). Dark theme is the default.
+ * Up / down / neutral colors are never the only cue: components always add an icon and a word.
+ */
+@theme {
+  --color-ink: #060913;
+  --color-fg: #eaf0ff;
+  --color-fg-2: #c9d4ee;
+  --color-muted: #9aa8c7;
+  --color-cyan: #4dd8ff;
+  --color-violet: #7c5cff;
+  --color-up: #2ee6a6;
+  --color-down: #ff5c7a;
+  --color-down-fg: #ff8fa3; /* red text on dark backgrounds (AA contrast) */
+  --color-neutral: #ffc857;
+  --color-ema9: #4dd8ff;
+  --color-ema21: #b49bff;
+  --color-ema50: #ffc857;
+
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  --radius-card: 24px;
+  --radius-key: 14px;
+  --radius-tile: 16px;
+}
+
+html {
+  background: var(--color-ink);
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(60rem 36rem at 92% -8%, rgba(124, 92, 255, 0.26), transparent 60%),
+    radial-gradient(52rem 32rem at -6% -10%, rgba(77, 216, 255, 0.16), transparent 60%),
+    var(--color-ink);
+  background-attachment: fixed;
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+}
+
+/* Visible focus ring for keyboard users (docs/08 accessibility checklist). */
+:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Frosted glass panel with a lit top edge. */
+@utility glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 28px 50px -22px rgba(0, 0, 0, 0.75),
+    0 3px 0 rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+}
+
+/* Secondary "keycap" button: extruded, presses down 3px. */
+@utility key {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-key);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease;
+  &:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  }
+  &[aria-pressed="true"],
+  &[aria-current="page"],
+  &[data-selected="true"] {
+    background: linear-gradient(180deg, rgba(124, 92, 255, 0.55), rgba(124, 92, 255, 0.25));
+    border-color: rgba(180, 155, 255, 0.7);
+  }
+}
+
+/* Primary button: cyan, extruded, dark text. */
+@utility btn-primary {
+  background: linear-gradient(180deg, #7be8ff, #3fc4ee);
+  color: #04121a;
+  font-weight: 700;
+  border-radius: var(--radius-key);
+  box-shadow:
+    0 4px 0 #1b7fa3,
+    0 12px 26px rgba(63, 196, 238, 0.32);
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease;
+  &:active {
+    transform: translateY(3px);
+    box-shadow:
+      0 1px 0 #1b7fa3,
+      0 6px 14px rgba(63, 196, 238, 0.28);
+  }
+}
+
+@utility tile {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Perspective grid behind page headers (decorative). */
+@utility floor-grid {
+  background-image:
+    linear-gradient(rgba(77, 216, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(77, 216, 255, 0.18) 1px, transparent 1px);
+  background-size: 56px 56px;
+  transform: perspective(520px) rotateX(64deg);
+  mask-image: linear-gradient(to top, black, transparent 75%);
+}
+
+/* The signal orb gently bobs; disabled for people who prefer reduced motion. */
+@keyframes orb-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.orb-bob {
+  animation: orb-bob 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-bob {
+    animation: none;
+  }
+  * {
+    transition: none !important;
+  }
+}
