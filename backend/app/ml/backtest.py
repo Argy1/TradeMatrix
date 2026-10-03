@@ -72,8 +72,13 @@ async def load_jobs(symbols: list[str], timeframe: str) -> list[tuple[str, pd.Da
     datasets = await load_datasets(symbols, timeframe)
     if timeframe != "1d":
         return list(datasets.items())
+    factory = db.session_factory()
+    async with factory() as session:
+        ids = {a.symbol: a.id for a in await repo.list_assets(session)}
+    # The pooled model sees which coin a row belongs to through its database id, the same
+    # value the worker passes when it predicts live.
     pooled = pd.concat(
-        [d.assign(asset_id=float(i)) for i, d in enumerate(datasets.values())]
+        [d.assign(asset_id=float(ids[symbol])) for symbol, d in datasets.items()]
     ).sort_index(kind="stable")
     return [("ALL", pooled)]
 

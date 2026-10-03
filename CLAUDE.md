@@ -82,6 +82,7 @@ TradeMatrix/
 - Mobile: `cd apps/mobile && flutter run` / `flutter analyze` / `flutter test`
 - Database: `npx supabase db push` (apply `supabase/migrations`). The Supabase CLI runs through `npx`, there is no global install. While the CLI is logged in to a different Supabase account, apply migrations through the Supabase connector or with `npx supabase db push --db-url <session pooler URL>`.
 - Gate 0 check: `uv run scripts/gate0_check.py` (from the repo root; reads the root `.env`)
+- Models (from backend/): `uv run python -m app.ml.tune` (choose settings on 2021-2024) / `uv run python -m app.ml.backtest` (evaluate) / `uv run python -m app.ml.train_models` (train, store, activate). Then redeploy `worker` so it loads the new files.
 - Python: `uv` manages Python 3.12 (the system Python is 3.14 and is not used).
 
 If a command here does not exist yet, create it as part of the task and update this section.
@@ -117,14 +118,11 @@ If a command here does not exist yet, create it as part of the task and update t
 
 Update this block as work progresses.
 
-- Current phase: **Phase 2 — Prediction engine v1** (see docs/05-ROADMAP.md). Gates 0 and 1 passed on 2026-10-03.
-- Last completed task: Phase 1, first slice. `backend/` is scaffolded (uv, FastAPI, ruff, pytest) with the Binance market-data client, candle quality checks, the indicators (SMA, EMA, RSI, MACD, Bollinger, ATR, ADX, OBV), Supabase JWT verification and `/health`; 44 tests pass.
-- Gate 1 passed on 2026-10-03. Candle history is backfilled (129,580 rows, no gaps); the API runs on Railway at https://api-production-a829.up.railway.app (project `tradematrix`, service `api`, Singapore region; deploy with `cd backend && railway up --service api --ci`).
-- GitHub: https://github.com/Argy1/TradeMatrix (private). The first GitHub Actions result has not been checked yet.
-- Phase 2 so far: features (no-leakage tests), metrics and baselines, walk-forward splitter, XGBoost + Platt calibration, and the backtest CLI `uv run python -m app.ml.backtest` (reports in `backend/reports/`). First result: no model beats the baselines; see docs/05.
-- Improvement round done (option 1): 1h beats the baselines for BTC, ETH, BNB and XRP; SOL 1h, 4h and 1d do not (docs/05). The worker runs on Railway (service `worker`). Next: model storage + `model_versions`, `run_predictions`, `resolve_outcomes`, the notebook; then Argy's Gate 2 call on how to present 4h/1d.
-- Railway settings live on the services, not in `railway.toml` (deprecated); see backend/README.md.
-- Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1) with the init migration (12 tables, RLS on all, 5 assets).
+- Current phase: **Phase 3 — Web MVP** (see docs/05-ROADMAP.md). Gates 0, 1 and 2 passed on 2026-10-03 (Gate 2 by Argy's decision, see docs/05).
+- Last completed task: Phase 2. Live models in the private `models` bucket and `model_versions` (1h BTC/ETH/BNB/XRP `ok`, the rest `degraded`); the Railway `worker` ingests, predicts and resolves outcomes every hour; notebook `backend/notebooks/01_backtest_walkthrough.ipynb`.
+- Next: Phase 3. First the API endpoints the web needs (`/v1/markets`, `/v1/predictions/latest`, `/v1/predictions/history`, `/v1/performance`), then `apps/web`.
+- Open question for Argy: the pooled 1d model's calibration fell back to the base rate, so it currently gives every coin the same 58.2% Up (flagged `degraded`).
+- Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1). Railway: project `tradematrix`, services `api` (https://api-production-a829.up.railway.app) and `worker`. GitHub: https://github.com/Argy1/TradeMatrix (private).
 - Decisions: `GEMINI_MODEL=gemini-3.8-flash` (approved 2026-10-03). Exchange stays Binance through the market-data-only hosts in `BINANCE_REST_URL` / `BINANCE_WS_URL`.
 - Known issues:
   - `api.binance.com` is blocked on Argy's network, and it also rejects US IPs. Always use the hosts from the env variables, and pick a Singapore region on Railway in Phase 1.

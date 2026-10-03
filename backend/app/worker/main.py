@@ -17,25 +17,34 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app import db
 from app.config import get_settings
 from app.data.exchanges import get_exchange_client
+from app.ml.predict import ModelCache
+from app.ml.storage import ModelStorage
 from app.timeframes import TIMEFRAMES
-from app.worker.jobs import heartbeat_work, ingest_job, log, run_job
+from app.worker.jobs import candle_close, heartbeat_work, log, run_job
 
 
 async def main() -> None:
     # stdout, not stderr: Railway shows stderr lines as errors.
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
-    client = get_exchange_client(get_settings())
+    settings = get_settings()
+    client = get_exchange_client(settings)
+    storage = ModelStorage(
+        settings.supabase_url, settings.supabase_service_role_key, settings.supabase_models_bucket
+    )
+    cache = ModelCache(storage)
+    k = settings.sentiment_blend_k
 
-    # Catch up first: if the worker was down, this loads every candle it missed.
-    await run_job("ingest_candles", ingest_job(client, list(TIMEFRAMES)))
+    # Catch up first: load every candle missed while the worker was down, predict the newest
+    # candles (skipped if already done), and resolve finished predictions.
+    await candle_close(client, cache, k, list(TIMEFRAMES))
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     # 5 seconds after every full hour, when 1h (and sometimes 4h/1d) candles have just closed.
     scheduler.add_job(
-        run_job,
+        candle_close,
         CronTrigger(minute=0, second=5, timezone="UTC"),
-        args=["ingest_candles", ingest_job(client)],
-        id="ingest_candles",
+        args=[client, cache, k],
+        id="candle_close",
         max_instances=1,  # never two runs of the same job at once
         coalesce=True,  # after a pause, run once instead of once per missed hour
         misfire_grace_time=600,
@@ -62,6 +71,7 @@ async def main() -> None:
     finally:
         scheduler.shutdown(wait=False)
         await client.aclose()
+        await storage.aclose()
         engine = db.get_engine()
         if engine is not None:
             await engine.dispose()

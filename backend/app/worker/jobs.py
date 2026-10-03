@@ -13,6 +13,7 @@ from app import db
 from app.data import repo
 from app.data.exchanges import ExchangeClient
 from app.data.ingest import ingest_candles
+from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
 from app.timeframes import TIMEFRAMES, floor_time
 
 logger = logging.getLogger("worker")
@@ -61,6 +62,9 @@ async def run_job(job_name: str, work: Callable[[AsyncSession], Awaitable[dict]]
                 details = await work(session)
         except Exception as exc:  # a failing job must never stop the scheduler
             error = f"{type(exc).__name__}: {exc}"[:500]
+        # Partial failures (e.g. one model out of 15) are committed work plus a recorded error.
+        if error is None and details.get("errors"):
+            error = "; ".join(details["errors"])[:500]
         async with session.begin():
             await repo.record_heartbeat(session, job_name, error)
     log(
@@ -90,3 +94,30 @@ def ingest_job(client: ExchangeClient, timeframes: list[str] | None = None):
 
 async def heartbeat_work(_session: AsyncSession) -> dict:
     return {}
+
+
+def predictions_job(cache: ModelCache, blend_k: float, timeframes: list[str] | None = None):
+    async def work(session: AsyncSession) -> dict:
+        now = datetime.now(UTC)
+        return await run_predictions(
+            session, cache, timeframes or closed_timeframes(now), now, blend_k=blend_k
+        )
+
+    return work
+
+
+async def outcomes_work(session: AsyncSession) -> dict:
+    return await resolve_outcomes(session)
+
+
+async def candle_close(
+    client: ExchangeClient,
+    cache: ModelCache,
+    blend_k: float,
+    timeframes: list[str] | None = None,
+) -> None:
+    """The heart of the system (docs/02): store the closed candles, predict the next ones, then
+    score the predictions whose target candle just closed. In this order, every hour."""
+    await run_job("ingest_candles", ingest_job(client, timeframes))
+    await run_job("run_predictions", predictions_job(cache, blend_k, timeframes))
+    await run_job("resolve_outcomes", outcomes_work)

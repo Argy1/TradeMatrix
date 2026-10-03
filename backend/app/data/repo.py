@@ -213,6 +213,20 @@ async def record_heartbeat(session: AsyncSession, job_name: str, error: str | No
     )
 
 
+async def active_model_status(session: AsyncSession) -> list[tuple]:
+    """(symbol, timeframe, model_version_id, trained_at, status) for every active model."""
+    rows = await session.execute(
+        text(
+            """
+            select a.symbol, m.timeframe, m.id, m.trained_at, m.status
+            from model_versions m join assets a on a.id = m.asset_id
+            where m.is_active order by m.timeframe, a.id
+            """
+        )
+    )
+    return [tuple(row) for row in rows]
+
+
 async def list_heartbeats(session: AsyncSession) -> list[Heartbeat]:
     rows = await session.execute(
         text(

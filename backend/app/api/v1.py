@@ -16,6 +16,7 @@ from app.api.schemas import (
     CandleOut,
     CandlesResponse,
     JobStatus,
+    ModelStatus,
     StatusResponse,
     price,
 )
@@ -108,6 +109,12 @@ async def get_status(session: Db) -> StatusResponse:
         )
         for h in await repo.list_heartbeats(session)
     ]
+    models = [
+        ModelStatus(
+            symbol=symbol, timeframe=tf, model_version_id=mid, trained_at=trained, status=status
+        )
+        for symbol, tf, mid, trained, status in await repo.active_model_status(session)
+    ]
     return StatusResponse(
-        jobs=jobs, candles=freshness, models=[], stale=any(f.stale for f in freshness)
+        jobs=jobs, candles=freshness, models=models, stale=any(f.stale for f in freshness)
     )

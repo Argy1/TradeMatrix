@@ -56,8 +56,17 @@ class CandleFreshness(BaseModel):
     stale: bool
 
 
+class ModelStatus(BaseModel):
+    symbol: str
+    timeframe: str
+    model_version_id: int
+    trained_at: datetime
+    # "degraded": did not beat the baselines in the evaluation, so the apps show a warning.
+    status: str
+
+
 class StatusResponse(BaseModel):
     jobs: list[JobStatus]
     candles: list[CandleFreshness]
-    models: list[dict]  # active model versions, filled in Phase 2
+    models: list[ModelStatus]
     stale: bool

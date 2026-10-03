@@ -64,6 +64,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def list_heartbeats(_session):
         return [Heartbeat("ingest_candles", NOW, NOW, None)]
 
+    async def active_model_status(_session):
+        return [("BTC", "1h", 16, NOW, "ok"), ("SOL", "1h", 18, NOW, "degraded")]
+
     for name, fake in {
         "list_assets": list_assets,
         "get_asset": get_asset,
@@ -71,6 +74,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         "latest_open_time": latest_open_time,
         "oldest_latest_candle": oldest_latest_candle,
         "list_heartbeats": list_heartbeats,
+        "active_model_status": active_model_status,
     }.items():
         monkeypatch.setattr(v1.repo, name, fake)
     app.dependency_overrides[v1.get_db] = fake_db
@@ -157,7 +161,10 @@ def test_status(client: TestClient) -> None:
     assert by_timeframe["1h"]["stale"] is False
     assert by_timeframe["4h"] == {"timeframe": "4h", "latest_open_time": None, "stale": True}
     assert body["stale"] is True  # one stale timeframe makes the whole status stale
-    assert body["models"] == []
+    assert [(m["symbol"], m["status"]) for m in body["models"]] == [
+        ("BTC", "ok"),
+        ("SOL", "degraded"),
+    ]
 
 
 def test_database_not_configured_gives_503() -> None:

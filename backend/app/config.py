@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_jwks_url: str = ""
     supabase_jwt_secret: str = ""
+    # Server only (worker): bypasses RLS, used for the private model bucket. Never in a client.
+    supabase_service_role_key: str = ""
+    supabase_models_bucket: str = "models"
+
+    # Sentiment blend weight. Stays 0 (shadow mode) until evaluated, see docs/03.
+    sentiment_blend_k: float = 0.0
 
     exchange: str = "binance"
     binance_rest_url: str = "https://data-api.binance.vision"
