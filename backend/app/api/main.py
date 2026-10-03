@@ -9,6 +9,7 @@ from slowapi.util import get_remote_address
 
 from app import db
 from app.api.errors import install_error_handlers
+from app.api.signals import router as signals_router
 from app.api.v1 import router as v1_router
 from app.config import get_settings
 
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     )
     install_error_handlers(app)
     app.include_router(v1_router)
+    app.include_router(signals_router)
 
     @app.get("/health", tags=["ops"])
     @limiter.exempt

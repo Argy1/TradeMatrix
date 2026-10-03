@@ -70,3 +70,115 @@ class StatusResponse(BaseModel):
     candles: list[CandleFreshness]
     models: list[ModelStatus]
     stale: bool
+
+
+# ---------- Signals (docs/04) ----------
+
+# Exact text from docs/06. Changing it needs Argy's approval.
+DISCLAIMER = (
+    "Signals are probabilistic estimates for information and education only, not financial "
+    "advice. Crypto is volatile and you can lose all the money you invest. Past performance does "
+    "not guarantee future results. TradeMatrix AI does not execute trades."
+)
+
+
+class ReasonOut(BaseModel):
+    code: str
+    text: str
+    effect: str  # up / down / none -> "Pushes up" / "Pushes down" / "No clear push" (docs/08)
+
+
+class ModelInfo(BaseModel):
+    id: int
+    trained_at: datetime
+    status: str  # "degraded" -> show the below-baseline warning
+
+
+class RecentAccuracy(BaseModel):
+    """Live track record of this coin and timeframe (last 200 resolved predictions)."""
+
+    model: float | None
+    naive_baseline: float | None
+    n: int
+    low_sample: bool
+
+
+class PredictionOut(BaseModel):
+    symbol: str
+    timeframe: str
+    label: str
+    p_up: float
+    base_open_time: datetime
+    target_open_time: datetime
+    target_close_time: datetime
+    base_close: str
+    reasons: list[ReasonOut]
+    sentiment_agg: float
+    model: ModelInfo
+    recent_accuracy: RecentAccuracy
+    disclaimer: str = DISCLAIMER
+    stale: bool
+
+
+class OutcomeOut(BaseModel):
+    target_close: str
+    actual_direction: str
+    correct: bool | None  # null for Neutral (no call)
+    return_pct: float
+
+
+class HistoryItem(BaseModel):
+    label: str
+    p_up: float
+    base_open_time: datetime
+    target_open_time: datetime
+    base_close: str
+    model_status: str
+    outcome: OutcomeOut | None  # null until the target candle has closed
+
+
+class HistoryResponse(BaseModel):
+    symbol: str
+    timeframe: str
+    items: list[HistoryItem]
+
+
+class SignalChip(BaseModel):
+    label: str
+    p_up: float
+    target_open_time: datetime
+    model_status: str
+    stale: bool
+
+
+class MarketRow(BaseModel):
+    symbol: str
+    name: str
+    last_price: str | None  # close of the latest closed 1h candle
+    change_24h_pct: float | None
+    signals: dict[str, SignalChip | None]  # "1h" / "4h" / "1d"
+
+
+class LabelStats(BaseModel):
+    n: int
+    accuracy: float | None
+
+
+class PerformanceBaseline(BaseModel):
+    naive: float | None
+    always_up: float | None
+
+
+class PerformanceOut(BaseModel):
+    symbol: str | None
+    timeframe: str | None
+    days: int
+    n_predictions: int
+    n_resolved: int
+    coverage: float | None
+    accuracy: float | None
+    baseline: PerformanceBaseline
+    brier: float | None
+    brier_baseline: float | None
+    by_label: dict[str, LabelStats]
+    low_sample: bool
