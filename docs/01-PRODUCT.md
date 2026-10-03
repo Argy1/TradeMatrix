@@ -21,7 +21,7 @@ TradeMatrix AI tells a crypto trader how likely a coin is to close higher or low
 
 ## v1 scope
 
-**Coins (vs USDT):** BTC, ETH, SOL, BNB, XRP. Stored in the `assets` table so more can be added without code changes.
+**Coins (vs USDT):** BTC, ETH, SOL, BNB, XRP, plus (Argy's scope change, 2026-10-03) DOGE, ADA, LINK, AVAX, UNI, NEAR, LTC, TRX, DOT, BCH, XLM: 16 coins. Rule for adding more: about 6+ years of Binance history and solid daily volume. Stored in the `assets` table so more can be added without code changes (one migration + backfill + model training).
 **Timeframes:** 1h, 4h, 1d. One prediction per coin per timeframe per candle close (the next candle).
 
 ### Must have

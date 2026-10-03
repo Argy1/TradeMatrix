@@ -123,7 +123,8 @@ Update this block as work progresses.
 - Phase 3 so far: signal endpoints and `/ws/stream` in the API; `apps/web` with the design system, markets home, coin page (chart, live updates, signal card), track record and About. Run locally with `cd apps/web && npm run dev` (reads `apps/web/.env.local`).
 - Web is live at https://tradematrix-rho.vercel.app (Vercel project `tradematrix`, auto-deploys on push to `main`). Email login + watchlist done; Google sign-in later.
 - Sentry is live (web + api + worker). Supabase Auth Site URL set by Argy.
-- Phase 3 tasks all done (canvas comparison finished 2026-10-03). Waiting for Gate 3: 7 days of logged signals with no missed runs, earliest 2026-10-10. Argy chose to WAIT for the gate before starting Phase 4 (no Phase 4 work or worker deploys until then).
+- Phase 3 tasks all done (canvas comparison finished 2026-10-03). 16 coins since 2026-10-03 (scope change by Argy; the Gate 3 clock restarted then). Waiting for Gate 3: 7 days of logged signals with no missed runs, earliest about 2026-10-10. Argy chose to WAIT for the gate before starting Phase 4.
+- Adding a coin later: migration in `supabase/migrations/`, `uv run python -m app.data.backfill --symbols X --since 2020-09-01`, `uv run python -m app.ml.backtest --symbols X --timeframes 1h,4h`, `uv run python -m app.ml.train_models --symbols X --timeframes 1h,4h` and `--timeframes 1d` (pooled), then redeploy `api` so the live stream includes it.
 - Open for Argy: test sign-up + watchlist on the live site; rotate the secrets that were shared in chat.
 - Open question for Argy: the pooled 1d model's calibration fell back to the base rate, so it currently gives every coin the same 58.2% Up (flagged `degraded`).
 - Supabase project: `TradeMatrix` (ref `hoanadzkysksfvgimukn`, ap-southeast-1). Railway: project `tradematrix`, services `api` (https://api-production-a829.up.railway.app) and `worker`. GitHub: https://github.com/Argy1/TradeMatrix (private).

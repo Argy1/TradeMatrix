@@ -105,6 +105,8 @@ Goal: a usable dashboard on Vercel.
 
 **Gate 3:** the live site shows real signals and a live chart; signals are logged for 7 days with no missed runs; `/v1/status` shows fresh jobs.
 
+Scope change 2026-10-03 (Argy): 11 more coins (16 total). Argy chose to add them now and restart the Gate 3 clock: the 7-day window starts at the first hourly run with all 16 coins predicted, so the earliest pass is about 2026-10-10.
+
 ---
 
 ## Phase 4 — Sentiment and alerts (weeks 9–10)
