@@ -115,6 +115,13 @@ New-coin results (frozen settings, scored on 2024-10 onwards, reports in `backen
 
 Goal: Gemini sentiment in **shadow mode**, plus alerts.
 
+- [ ] First task after Gate 3 (approved by Argy 2026-10-03): compact feature snapshot, to slow database growth from about 25 MB to about 11 MB a month. Each signal stores 33 feature values as JSON with names (about 1,070 bytes); store them as `predictions.feature_values real[]` in the model's feature order (about 160 bytes) and the names once in `model_versions.feature_names text[]`.
+  - Additive migration first (new columns, `features` becomes nullable), deployed between two hourly runs so no run is missed.
+  - Fill `feature_names` for the existing models from their model files.
+  - A view that joins names and values back into JSON, so an audit stays one query.
+  - Test: a snapshot reads back to the same values in the same order (the main risk is a name/value order mix-up).
+  - Convert the old rows and compare them with the JSON; drop the `features` column in a later migration only after they match.
+  - Update the wording of rule 7 in `CLAUDE.md` ("features JSON" becomes "feature snapshot") and docs/03 if it names the column.
 - [ ] `ingest_news` (RSS + CryptoPanic) with dedupe and asset keyword tagging.
 - [ ] Gemini client (`google-genai`): JSON schema, temperature 0, validation, retry, budget guard, prompt versioning + tests with mocked and malformed responses.
 - [ ] `score_sentiment` job; recency-weighted aggregation per asset; store `sentiment_agg` on predictions (`SENTIMENT_BLEND_K=0`).
