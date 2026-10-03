@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     title: "What we found when testing",
-    text: "In walk-forward tests on data the model had never seen, the 1-hour models for Bitcoin, Ethereum, BNB and XRP beat the baselines by a small margin. The others did not, so their signals carry a warning. Even the small edge is smaller than trading fees if you traded every signal. Treat signals as one input to your own decision.",
+    text: "In walk-forward tests on data the models had never seen, most 1-hour models beat the baselines by a small margin, while the 4-hour and daily models did not. Any model that is below the baseline shows a warning on its signal. Even the small edge is smaller than trading fees if you traded every signal. Treat signals as one input to your own decision.",
   },
   {
     title: "What we never do",

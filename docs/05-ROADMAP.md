@@ -107,6 +107,8 @@ Goal: a usable dashboard on Vercel.
 
 Scope change 2026-10-03 (Argy): 11 more coins (16 total). Argy chose to add them now and restart the Gate 3 clock: the 7-day window starts at the first hourly run with all 16 coins predicted, so the earliest pass is about 2026-10-10.
 
+New-coin results (frozen settings, scored on 2024-10 onwards, reports in `backend/reports/`): 1h beats both baselines for ADA, LINK, AVAX, LTC, DOT, BCH and XLM; DOGE, UNI, NEAR and TRX do not. No 4h model beats them. The pooled 1d model, retrained on all 16 coins, improved (53.7% vs naive 50.1%) but its Brier score is still not better than the base rate, so it stays `degraded`. Totals: 48 active models, 11 `ok` (all 1h), 37 `degraded`.
+
 ---
 
 ## Phase 4 — Sentiment and alerts (weeks 9–10)
