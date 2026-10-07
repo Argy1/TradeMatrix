@@ -135,3 +135,11 @@ Rules: close idle connections after 60 s without pong; limit symbols per connect
 | `price_below` | price | Last price crosses below |
 
 At most one notification per rule per `cooldown_minutes`. Evaluate against the stored predictions so alerts match what the app shows.
+
+How it is built (`backend/app/alerts/`, `backend/app/api/alerts.py`):
+
+- **Rules:** signal rules (`signal_change`, `prob_above`, `prob_below`) need a `timeframe`; price rules must not have one. `threshold` is a probability between 0 and 1, a price above 0, or absent for `signal_change`. `cooldown_minutes` is 1 to 10080 (default 60). A user can have at most 20 rules (`409 alert_limit`).
+- **Signal rules** are checked right after each prediction run (job `evaluate_alerts`). A signal that already existed when the rule was created never fires it, and the same signal never fires a rule twice. For these rules `last_triggered_at` holds the open time of the candle whose signal fired, so the cooldown counts in candles (60 minutes means every 1h signal).
+- **Price rules** are checked every minute (job `check_price_alerts`) and fire on a **crossing**: the price a minute ago was on one side of the level and the price now is on the other. A price that stays beyond the level does not fire again. The previous prices live in the worker's memory, so the first check after a worker restart only sets the starting point. If nobody has a price rule, no price is fetched.
+- **Notifications** are fixed templates filled with stored values, never AI text, and every body ends with `Not financial advice. Estimates only.`
+- **Responses:** `POST /v1/alerts` returns `201` with the rule; `PATCH` changes only the fields that are sent (`active`, `threshold`, `cooldown_minutes`); `DELETE` returns the remaining rules. `threshold` travels as a string. `GET /v1/notifications` returns `items` and the `unread` count. A rule or notification of another user is answered with `404`.

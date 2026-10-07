@@ -43,11 +43,12 @@ One process, one instance only. Scheduled jobs (UTC):
 | Job | Schedule | What it does |
 | --- | --- | --- |
 | `ingest_candles` | at each candle close + 5 s (1h: every hour; 4h: 00,04,08,12,16,20; 1d: 00:00) | Fetch newly closed candles for all active assets, upsert into `candles` |
-| `run_predictions` | right after `ingest_candles` for that timeframe | Build features, predict, blend sentiment, store a row in `predictions`, then evaluate alerts |
+| `run_predictions` | right after `ingest_candles` for that timeframe | Build features, predict, read the coin's news sentiment (blended only when `k > 0`), store a row in `predictions` |
 | `resolve_outcomes` | after each candle close | Fill `prediction_outcomes` for predictions whose target candle just closed |
+| `evaluate_alerts` | after each candle close, last step | Check signal alerts against the new predictions, write `notifications` |
 | `ingest_news` | every 15 min (:02, :17, :32, :47) | Fetch headlines from the RSS feeds, dedupe by URL and by title, tag assets by keyword, delete headlines older than 90 days |
 | `score_sentiment` | every 15 min (:04, :19, :34, :49) | Send unscored headlines from the last 24 h to Gemini in batches, validate and store the results; stops at the daily budget |
-| `check_price_alerts` | every 1 min | Fetch last prices, evaluate price alerts |
+| `check_price_alerts` | every 1 min (second :30) | If any price alert exists: fetch last prices and fire the alerts whose level was crossed since the previous check |
 | `retrain_models` | weekly, Sunday 02:00 UTC | Walk-forward train per asset/timeframe; activate new model only if it is not worse |
 | `heartbeat` | every 5 min | Log a heartbeat and update `worker_heartbeat` for monitoring |
 

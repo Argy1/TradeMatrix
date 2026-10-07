@@ -5,11 +5,13 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import db
+from app.alerts.evaluate import evaluate_price_alerts, evaluate_signal_alerts
 from app.data import repo
 from app.data.exchanges import ExchangeClient
 from app.data.ingest import ingest_candles
@@ -47,8 +49,14 @@ async def try_lock(session: AsyncSession, job_name: str) -> bool:
     return bool(result.scalar_one())
 
 
-async def run_job(job_name: str, work: Callable[[AsyncSession], Awaitable[dict]]) -> None:
-    """Run one job: lock, work, commit, then record the outcome in worker_heartbeat."""
+async def run_job(
+    job_name: str, work: Callable[[AsyncSession], Awaitable[dict]], *, quiet_when_idle: bool = False
+) -> None:
+    """Run one job: lock, work, commit, then record the outcome in worker_heartbeat.
+
+    `quiet_when_idle` is for the every-minute job: a run that had nothing to check writes no
+    log line (1,440 identical lines a day would bury the useful ones). Errors are always logged.
+    """
     factory = db.session_factory()
     if factory is None:
         log("job_skipped", job=job_name, reason="database not configured")
@@ -70,6 +78,8 @@ async def run_job(job_name: str, work: Callable[[AsyncSession], Awaitable[dict]]
             error = "; ".join(details["errors"])[:500]
         async with session.begin():
             await repo.record_heartbeat(session, job_name, error)
+    if quiet_when_idle and error is None and not details.get("checked"):
+        return
     log(
         "job_finished",
         job=job_name,
@@ -142,14 +152,32 @@ def sentiment_job(scorer: Scorer, max_per_run: int, batch_size: int, max_per_day
     return work
 
 
+async def alerts_work(session: AsyncSession) -> dict:
+    """Signal alerts, checked against the predictions that were just stored."""
+    return await evaluate_signal_alerts(session)
+
+
+def price_alerts_job(client: ExchangeClient):
+    """Price alerts, every minute. Prices from the previous check stay in memory: a crossing
+    needs two prices, and after a restart the first check only sets the starting point."""
+    last_prices: dict[str, Decimal] = {}
+
+    async def work(session: AsyncSession) -> dict:
+        return await evaluate_price_alerts(session, client, last_prices)
+
+    return work
+
+
 async def candle_close(
     client: ExchangeClient,
     cache: ModelCache,
     blend_k: float,
     timeframes: list[str] | None = None,
 ) -> None:
-    """The heart of the system (docs/02): store the closed candles, predict the next ones, then
-    score the predictions whose target candle just closed. In this order, every hour."""
+    """The heart of the system (docs/02): store the closed candles, predict the next ones,
+    score the predictions whose target candle just closed, then check the signal alerts.
+    In this order, every hour."""
     await run_job("ingest_candles", ingest_job(client, timeframes))
     await run_job("run_predictions", predictions_job(cache, blend_k, timeframes))
     await run_job("resolve_outcomes", outcomes_work)
+    await run_job("evaluate_alerts", alerts_work)

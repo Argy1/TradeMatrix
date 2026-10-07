@@ -12,6 +12,7 @@ from slowapi.util import get_remote_address
 
 from app import db
 from app.api.account import router as account_router
+from app.api.alerts import router as alerts_router
 from app.api.errors import install_error_handlers
 from app.api.news import router as news_router
 from app.api.signals import router as signals_router
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(news_router)
     app.include_router(stream_router)
     app.include_router(account_router)
+    app.include_router(alerts_router)
 
     @app.get("/health", tags=["ops"])
     @limiter.exempt

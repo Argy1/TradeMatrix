@@ -143,6 +143,7 @@ Goal: Gemini sentiment in **shadow mode**, plus alerts.
 - [ ] News list with sentiment badges on the coin page.
   - Status 2026-10-07, branch `phase-4`: `GET /v1/news` (`app/api/news.py`) and the "News tone" section on the coin page (`apps/web/src/components/news-list.tsx`) are written and tested. Checked in the browser at desktop and phone width with real headlines, using a local API whose database transaction was never committed (first run: 221 headlines fetched, 160 stored, 40 scored with 2 Gemini requests). `PredictionOut.sentiment_used` tells the page whether news is part of the signal; while `k = 0` the page says news is context only. Not deployed.
 - [ ] Alerts: CRUD API, evaluation after each prediction + `check_price_alerts` every minute, cooldowns, `notifications` rows, in-app notification list on web.
+  - Status 2026-10-07, branch `phase-4`, backend: written and tested (`app/alerts/rules.py` and `evaluate.py`, `app/api/alerts.py`, jobs `evaluate_alerts` and `check_price_alerts`). Tested with fakes and against the real database in rolled-back transactions: rules are private per user and capped at 20, a signal fires a rule once, cooldowns hold, a price rule fires on a crossing only. Push notifications (FCM, `/v1/devices`) belong to Phase 5. Not deployed.
 - [ ] After at least 4 weeks of shadow data: evaluation notebook (does `p_ml + k * sentiment_agg` improve Brier/accuracy?). Record the decision and the final `k` here.
 - [ ] Optional: email alerts (Resend) after in-app alerts work.
 

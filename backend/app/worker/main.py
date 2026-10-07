@@ -23,7 +23,15 @@ from app.ml.storage import ModelStorage
 from app.observability import init_sentry
 from app.sentiment.gemini import GeminiScorer
 from app.timeframes import TIMEFRAMES
-from app.worker.jobs import candle_close, heartbeat_work, log, news_job, run_job, sentiment_job
+from app.worker.jobs import (
+    candle_close,
+    heartbeat_work,
+    log,
+    news_job,
+    price_alerts_job,
+    run_job,
+    sentiment_job,
+)
 
 
 async def main() -> None:
@@ -90,6 +98,17 @@ async def main() -> None:
         )
     else:
         log("sentiment_disabled", reason="GEMINI_API_KEY or GEMINI_MODEL is not set")
+    # Price alerts every minute, at second 30 so it never lands on the hourly run's start.
+    scheduler.add_job(
+        run_job,
+        CronTrigger(second=30, timezone="UTC"),
+        args=["check_price_alerts", price_alerts_job(client)],
+        kwargs={"quiet_when_idle": True},
+        id="check_price_alerts",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=30,
+    )
     scheduler.add_job(
         run_job,
         IntervalTrigger(minutes=5),
