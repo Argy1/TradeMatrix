@@ -17,11 +17,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app import db
 from app.config import get_settings
 from app.data.exchanges import get_exchange_client
+from app.data.news import get_news_sources, news_http
 from app.ml.predict import ModelCache
 from app.ml.storage import ModelStorage
 from app.observability import init_sentry
 from app.timeframes import TIMEFRAMES
-from app.worker.jobs import candle_close, heartbeat_work, log, run_job
+from app.worker.jobs import candle_close, heartbeat_work, log, news_job, run_job
 
 
 async def main() -> None:
@@ -35,6 +36,7 @@ async def main() -> None:
     )
     cache = ModelCache(storage)
     k = settings.sentiment_blend_k
+    feeds = news_http()
 
     # Catch up first: load every candle missed while the worker was down, predict the newest
     # candles (skipped if already done), and resolve finished predictions.
@@ -50,6 +52,17 @@ async def main() -> None:
         max_instances=1,  # never two runs of the same job at once
         coalesce=True,  # after a pause, run once instead of once per missed hour
         misfire_grace_time=600,
+    )
+    # Headlines every 15 minutes, at :02 :17 :32 :47, so it never starts together with the
+    # hourly candle run at :00.
+    scheduler.add_job(
+        run_job,
+        CronTrigger(minute="2-59/15", timezone="UTC"),
+        args=["ingest_news", news_job(get_news_sources(feeds))],
+        id="ingest_news",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
     )
     scheduler.add_job(
         run_job,
@@ -74,6 +87,7 @@ async def main() -> None:
         scheduler.shutdown(wait=False)
         await client.aclose()
         await storage.aclose()
+        await feeds.aclose()
         engine = db.get_engine()
         if engine is not None:
             await engine.dispose()

@@ -131,6 +131,8 @@ Goal: Gemini sentiment in **shadow mode**, plus alerts.
     5. `uv run python -m app.ml.snapshots`: stores the feature names of the 68 existing model versions, converts the old signals and checks them. From the next run on, new signals are compact.
     6. A few days later: `uv run python -m app.ml.snapshots --clear-json`, then a new migration that drops `predictions.features` once no row needs it.
 - [ ] `ingest_news` (RSS + CryptoPanic) with dedupe and asset keyword tagging.
+  - Status 2026-10-07, branch `phase-4`: RSS is written and tested (`app/data/news/`: CoinDesk and Cointelegraph feeds, safe XML parsing with `defusedxml`, tracking parameters removed from links, dedupe by URL and by normalized title, keyword tagging for the 16 coins, headlines older than 90 days pruned). The worker job runs every 15 minutes at :02/:17/:32/:47. Not deployed.
+  - CryptoPanic is not built: its current plans and API could not be read without an account. Argy to check https://cryptopanic.com/developers/api/ (is there still a free plan, and may headlines be shown publicly?). If yes, add `app/data/news/cryptopanic.py` and `CRYPTOPANIC_API_KEY`; if not, stay with RSS and add more feeds.
 - [ ] Gemini client (`google-genai`): JSON schema, temperature 0, validation, retry, budget guard, prompt versioning + tests with mocked and malformed responses.
 - [ ] `score_sentiment` job; recency-weighted aggregation per asset; store `sentiment_agg` on predictions (`SENTIMENT_BLEND_K=0`).
 - [ ] News list with sentiment badges on the coin page.

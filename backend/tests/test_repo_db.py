@@ -18,6 +18,8 @@ from sqlalchemy.pool import NullPool
 from app.config import BACKEND_DIR, REPO_ROOT, Settings
 from app.data import repo
 from app.data.exchanges.base import Candle
+from app.data.news.base import FeedError, Headline
+from app.data.news.ingest import ingest_news, prune_old_news
 from app.ml import snapshots
 
 pytestmark = pytest.mark.db
@@ -207,3 +209,72 @@ async def test_old_json_snapshots_convert_and_are_checked(session: AsyncSession)
     assert await snapshots.clear_json_rows(session, model_id) == 1
     assert (await stored_snapshot(session, old))[0] is None
     assert as_dict((await stored_snapshot(session, other))[0]) == {"rsi14": 61.5}
+
+
+# ---- News ingestion ----
+
+
+class FakeSource:
+    def __init__(self, name: str, headlines: list[Headline] | None = None, error=None) -> None:
+        self.name, self._headlines, self._error = name, headlines or [], error
+
+    async def fetch(self) -> list[Headline]:
+        if self._error:
+            raise self._error
+        return self._headlines
+
+
+async def test_headlines_are_stored_once_and_tagged(session: AsyncSession) -> None:
+    now = T0 + timedelta(days=150)
+    site = "https://news.example.test"
+    story = Headline(
+        "feed-a", "Bitcoin and Solana rally on test news", f"{site}/a/1", now - timedelta(hours=2)
+    )
+    # The same story from a second source: other URL, other capitals and punctuation.
+    copy = Headline(
+        "feed-b", "BITCOIN and Solana rally, on test news!", f"{site}/b/9", now - timedelta(hours=1)
+    )
+    old = Headline("feed-a", "Something from last month", f"{site}/a/2", now - timedelta(days=30))
+    ahead = Headline(
+        "feed-a", "This source has a fast clock", f"{site}/a/3", now + timedelta(hours=5)
+    )
+    sources = [
+        FakeSource("feed-a", [story, old, ahead]),
+        FakeSource("feed-b", [copy]),
+        FakeSource("down", error=FeedError("no answer")),
+    ]
+
+    first = await ingest_news(session, sources, now=now)
+    again = await ingest_news(session, sources, now=now)  # the job running a second time
+
+    assert (first["fetched"], first["stored"]) == (4, 2)
+    assert again["stored"] == 0
+    assert first["errors"] == ["down: FeedError: no answer"]  # reported, others still stored
+    rows = await session.execute(
+        text(
+            "select source, url, published_at, asset_symbols from news_items "
+            "where url like :site order by url"
+        ),
+        {"site": f"{site}/%"},
+    )
+    assert [tuple(row) for row in rows] == [
+        ("feed-a", f"{site}/a/1", now - timedelta(hours=2), ["BTC", "SOL"]),
+        ("feed-a", f"{site}/a/3", now, []),  # a time in the future is stored as "now"
+    ]
+
+
+async def test_old_headlines_are_pruned(session: AsyncSession) -> None:
+    now = T0 + timedelta(days=150)
+    await session.execute(
+        text(
+            "insert into news_items (source, title, url, title_hash, published_at) values "
+            "('feed-a', 'Old', 'https://news.example.test/old', 'h-old', :old), "
+            "('feed-a', 'Recent', 'https://news.example.test/recent', 'h-recent', :recent)"
+        ),
+        {"old": now - timedelta(days=91), "recent": now - timedelta(days=89)},
+    )
+    assert await prune_old_news(session, now) == 1
+    left = await session.execute(
+        text("select title from news_items where url like 'https://news.example.test/%'")
+    )
+    assert [row.title for row in left] == ["Recent"]

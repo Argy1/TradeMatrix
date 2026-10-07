@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import text
@@ -13,6 +13,8 @@ from app import db
 from app.data import repo
 from app.data.exchanges import ExchangeClient
 from app.data.ingest import ingest_candles
+from app.data.news import NewsSource
+from app.data.news.ingest import ingest_news
 from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
 from app.timeframes import TIMEFRAMES, floor_time
 
@@ -108,6 +110,15 @@ def predictions_job(cache: ModelCache, blend_k: float, timeframes: list[str] | N
 
 async def outcomes_work(session: AsyncSession) -> dict:
     return await resolve_outcomes(session)
+
+
+def news_job(sources: Sequence[NewsSource]):
+    """Fetch headlines from every source and store the new ones (every 15 minutes)."""
+
+    async def work(session: AsyncSession) -> dict:
+        return await ingest_news(session, sources)
+
+    return work
 
 
 async def candle_close(
