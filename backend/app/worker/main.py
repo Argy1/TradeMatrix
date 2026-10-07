@@ -21,8 +21,9 @@ from app.data.news import get_news_sources, news_http
 from app.ml.predict import ModelCache
 from app.ml.storage import ModelStorage
 from app.observability import init_sentry
+from app.sentiment.gemini import GeminiScorer
 from app.timeframes import TIMEFRAMES
-from app.worker.jobs import candle_close, heartbeat_work, log, news_job, run_job
+from app.worker.jobs import candle_close, heartbeat_work, log, news_job, run_job, sentiment_job
 
 
 async def main() -> None:
@@ -37,6 +38,10 @@ async def main() -> None:
     cache = ModelCache(storage)
     k = settings.sentiment_blend_k
     feeds = news_http()
+    # Without a key the worker still runs everything else; headlines just stay unscored.
+    scorer = None
+    if settings.gemini_api_key and settings.gemini_model:
+        scorer = GeminiScorer.from_key(settings.gemini_api_key, settings.gemini_model)
 
     # Catch up first: load every candle missed while the worker was down, predict the newest
     # candles (skipped if already done), and resolve finished predictions.
@@ -64,6 +69,27 @@ async def main() -> None:
         coalesce=True,
         misfire_grace_time=300,
     )
+    if scorer is not None:
+        # Two minutes after the headlines arrive: :04 :19 :34 :49.
+        scheduler.add_job(
+            run_job,
+            CronTrigger(minute="4-59/15", timezone="UTC"),
+            args=[
+                "score_sentiment",
+                sentiment_job(
+                    scorer,
+                    settings.sentiment_max_per_run,
+                    settings.sentiment_batch_size,
+                    settings.sentiment_max_per_day,
+                ),
+            ],
+            id="score_sentiment",
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=300,
+        )
+    else:
+        log("sentiment_disabled", reason="GEMINI_API_KEY or GEMINI_MODEL is not set")
     scheduler.add_job(
         run_job,
         IntervalTrigger(minutes=5),
@@ -88,6 +114,8 @@ async def main() -> None:
         await client.aclose()
         await storage.aclose()
         await feeds.aclose()
+        if scorer is not None:
+            await scorer.aclose()
         engine = db.get_engine()
         if engine is not None:
             await engine.dispose()

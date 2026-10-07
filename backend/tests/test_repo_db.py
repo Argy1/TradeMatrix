@@ -9,6 +9,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import numpy as np
+import pandas as pd
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -19,8 +21,16 @@ from app.config import BACKEND_DIR, REPO_ROOT, Settings
 from app.data import repo
 from app.data.exchanges.base import Candle
 from app.data.news.base import FeedError, Headline
-from app.data.news.ingest import ingest_news, prune_old_news
+from app.data.news.ingest import ingest_news, prune_old_news, store_headlines
+from app.features.build import build_dataset, feature_columns
 from app.ml import snapshots
+from app.ml.config import XGB_PARAMS
+from app.ml.predict import run_predictions
+from app.ml.registry import ModelBundle
+from app.ml.train import fit_calibrated
+from app.sentiment.aggregate import sentiment_by_asset
+from app.sentiment.schemas import HeadlineSentiment
+from app.sentiment.score import score_sentiment, scored_today
 
 pytestmark = pytest.mark.db
 T0 = datetime(2001, 1, 1, tzinfo=UTC)
@@ -100,8 +110,7 @@ def as_dict(value: object) -> dict:
     return value if isinstance(value, dict) else json.loads(value)
 
 
-async def snapshot_model(session: AsyncSession, names: list[str]) -> tuple[int, int]:
-    """An inactive BTC 1h model version just for the test: (asset id, model version id)."""
+async def require_snapshot_migration(session: AsyncSession) -> None:
     migrated = await session.execute(
         text(
             "select 1 from information_schema.columns where table_schema = 'public' "
@@ -110,6 +119,11 @@ async def snapshot_model(session: AsyncSession, names: list[str]) -> tuple[int, 
     )
     if migrated.first() is None:
         pytest.skip("migration 20261007120000_compact_feature_snapshot is not applied yet")
+
+
+async def snapshot_model(session: AsyncSession, names: list[str]) -> tuple[int, int]:
+    """An inactive BTC 1h model version just for the test: (asset id, model version id)."""
+    await require_snapshot_migration(session)
     btc = await repo.get_asset(session, "BTC")
     model_id = await session.execute(
         text(
@@ -278,3 +292,151 @@ async def test_old_headlines_are_pruned(session: AsyncSession) -> None:
         text("select title from news_items where url like 'https://news.example.test/%'")
     )
     assert [row.title for row in left] == ["Recent"]
+
+
+# ---- Sentiment ----
+
+
+class TitleScorer:
+    """Stands in for Gemini: answers headlines about Bitcoin, stays silent on the others."""
+
+    model, prompt_version = "fake-model", "v-test"
+
+    def __init__(self) -> None:
+        self.batches: list[list[str]] = []
+
+    async def score(self, headlines: list, symbols: list[str]) -> list[HeadlineSentiment]:
+        self.batches.append([h.title for h in headlines])
+        return [
+            HeadlineSentiment(
+                id=h.id, assets=["BTC"], score=0.5, confidence=0.25, event_type="market", reason="t"
+            )
+            for h in headlines
+            if "Bitcoin" in h.title
+        ]
+
+
+async def test_headlines_are_scored_once_within_the_budget(session: AsyncSession) -> None:
+    now = T0 + timedelta(days=150, hours=12)
+    site = "https://news.example.test"
+    headlines = [
+        Headline("feed-a", "Bitcoin test headline", f"{site}/s/1", now - timedelta(hours=2)),
+        Headline("feed-a", "The model never answers this", f"{site}/s/2", now - timedelta(hours=3)),
+        Headline("feed-a", "Bitcoin news from yesterday", f"{site}/s/3", now - timedelta(hours=30)),
+    ]
+    assert await store_headlines(session, headlines, ["BTC", "ETH"], now) == 3
+    scorer, tries = TitleScorer(), {}
+
+    async def run(max_per_day: int = 100) -> dict:
+        return await score_sentiment(
+            session, scorer, max_per_run=10, batch_size=1, max_per_day=max_per_day, now=now,
+            tries=tries,
+        )  # fmt: skip
+
+    first = await run()
+    assert (first["scored"], first["requests"], first["waiting"]) == (1, 2, 1)
+    # Newest first, and the 30-hour-old headline is never sent: it cannot change a signal.
+    assert scorer.batches == [["Bitcoin test headline"], ["The model never answers this"]]
+
+    second = await run()
+    assert (second["scored"], second["requests"]) == (0, 1)  # the scored one is not sent again
+    await run()
+    assert (await run())["requests"] == 0  # after 3 silent tries the other one is left alone
+
+    stored = await session.execute(
+        text(
+            "select s.assets, s.score, s.confidence, s.event_type, s.model, s.prompt_version "
+            "from sentiments s join news_items n on n.id = s.news_id where n.url like :site"
+        ),
+        {"site": f"{site}/%"},
+    )
+    assert [tuple(row) for row in stored] == [
+        (["BTC"], 0.5, 0.25, "market", "fake-model", "v-test")
+    ]
+
+    # One number per coin, and only from headlines that existed at that moment.
+    assert await sentiment_by_asset(session, ["BTC", "ETH"], now) == {"BTC": 0.125, "ETH": 0.0}
+    earlier = await sentiment_by_asset(session, ["BTC"], now - timedelta(hours=3))
+    assert earlier == {"BTC": 0.0}
+
+    # Daily budget: counted from the table (here: pretend the row was scored on this test day).
+    await session.execute(
+        text(
+            "update sentiments set created_at = :now "
+            "where news_id in (select id from news_items where url like :site)"
+        ),
+        {"now": now, "site": f"{site}/%"},
+    )
+    assert await scored_today(session, now) == 1
+    capped = await run(max_per_day=1)
+    assert capped["budget_reached"] and capped["requests"] == 0
+
+
+class OneModelCache:
+    def __init__(self, bundle: ModelBundle) -> None:
+        self._bundle = bundle
+
+    async def get(self, path: str) -> ModelBundle:
+        return self._bundle
+
+
+def small_bundle() -> ModelBundle:
+    """A tiny model on made-up candles: enough to run the real prediction job's SQL."""
+    rng = np.random.default_rng(5)
+    close = 100 * np.exp(np.cumsum(rng.normal(0, 0.01, 1500)))
+    open_ = np.concatenate([[close[0]], close[:-1]])
+    frame = pd.DataFrame(
+        {
+            "open": open_,
+            "high": np.maximum(open_, close) * 1.002,
+            "low": np.minimum(open_, close) * 0.998,
+            "close": close,
+            "volume": rng.uniform(10, 1000, 1500),
+        },
+        index=pd.date_range("2025-01-01", periods=1500, freq="h", tz="UTC"),
+    )
+    data = build_dataset(frame)
+    params = XGB_PARAMS | {"n_estimators": 20, "early_stopping_rounds": 5}
+    model = fit_calibrated(
+        data.iloc[:900], data.iloc[900:1100], data.iloc[1100:1400], feature_columns(data), params
+    )
+    return ModelBundle(model, "BTC", "1h", "test", data.index[0], data.index[899])
+
+
+async def test_prediction_job_sql_accepts_sentiment_and_both_snapshot_forms(
+    session: AsyncSession,
+) -> None:
+    """The real `run_predictions` against the real tables, rolled back. The live worker has
+    normally written this hour's signals already, so nothing new is stored; what the test
+    proves is that every statement of the job is accepted by the database."""
+    await require_snapshot_migration(session)
+    bundle = small_bundle()
+    # BTC gets stored names (compact form); the other coins have none here (JSON form).
+    await session.execute(
+        text(
+            "update model_versions set feature_names = cast(:names as text[]) "
+            "where is_active and timeframe = '1h' "
+            "and asset_id = (select id from assets where symbol = 'BTC')"
+        ),
+        {"names": list(bundle.model.features)},
+    )
+    await session.execute(
+        text(
+            "update model_versions set feature_names = null "
+            "where is_active and timeframe = '1h' "
+            "and asset_id <> (select id from assets where symbol = 'BTC')"
+        )
+    )
+    active = (
+        await session.execute(
+            text(
+                "select count(*) from model_versions m join assets a on a.id = m.asset_id "
+                "where m.is_active and a.active and m.timeframe = '1h'"
+            )
+        )
+    ).scalar_one()
+
+    result = await run_predictions(session, OneModelCache(bundle), ["1h"], datetime.now(UTC))
+
+    assert result["errors"] == []
+    assert result["created"] + result["skipped"] == active

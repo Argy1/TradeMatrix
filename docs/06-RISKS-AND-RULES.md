@@ -29,6 +29,7 @@ Short version for tight spaces: `Not financial advice. Estimates only.`
 | Model drift | Markets change regime | Weekly retrain, rolling live accuracy, `degraded` flag |
 | Regulation | Publishing trading signals can count as investment advice in some jurisdictions; crypto is supervised by financial regulators in Indonesia | Legal check (OJK rules) before a public launch; start as a private beta; keep the disclaimer |
 | Data terms and limits | Free APIs restrict commercial use, rate and region | Read provider terms, adapters with a fallback exchange, caching, respect rate limits |
+| News content rights | Articles belong to their publishers | Store and show only the headline, the source name and a link to the original article (what an RSS feed is published for); never copy article text or images; identify ourselves in the User-Agent; remove a source if its publisher asks; re-read each publisher's terms before a public or paid launch |
 | LLM errors | Gemini can misread sarcasm, rumors or fake news | JSON schema, confidence threshold, shadow mode (`k = 0`) until evaluated, small max `k`, headlines treated as untrusted text |
 | Prompt injection via headlines | A headline could contain instructions | Prompt says to ignore instructions in headlines, schema-validated output only, no tools or actions given to the model |
 | Cost creep | LLM calls and hosting grow | Score each headline once, batch, daily budget guard, monthly budget alerts on Railway/Google |

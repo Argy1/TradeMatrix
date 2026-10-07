@@ -33,6 +33,13 @@ class Settings(BaseSettings):
 
     # Sentiment blend weight. Stays 0 (shadow mode) until evaluated, see docs/03.
     sentiment_blend_k: float = 0.0
+    # Gemini (worker only, never in a client). Empty key or model = sentiment scoring is off.
+    gemini_api_key: str = ""
+    gemini_model: str = ""
+    # Cost guard: headlines per run (every 15 min), per request and per UTC day.
+    sentiment_max_per_run: int = 40
+    sentiment_batch_size: int = 20
+    sentiment_max_per_day: int = 400
 
     exchange: str = "binance"
     binance_rest_url: str = "https://data-api.binance.vision"

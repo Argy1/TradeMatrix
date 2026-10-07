@@ -81,6 +81,8 @@ def test_shadow_mode_never_moves_the_probability(bundle: ModelBundle) -> None:
     blended = make_prediction(bundle, candles(), None, 1, sentiment=0.9, blend_k=0.1)
     assert shadow["p_up"] == pytest.approx(min(max(shadow["p_ml"], 0.01), 0.99))
     assert blended["p_up"] > shadow["p_up"]
+    # Sentiment that did not move the probability is not shown as a reason for the signal.
+    assert all(reason["code"] != "sentiment" for reason in shadow["reasons"])
 
 
 def test_short_history_gives_no_prediction(bundle: ModelBundle) -> None:

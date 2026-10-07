@@ -7,11 +7,17 @@ from app.data.news.rss import RssSource
 
 __all__ = ["FeedError", "Headline", "NewsSource", "get_news_sources", "news_http"]
 
-# Public RSS feeds, no key needed. CryptoPanic (docs/02) is added here once Argy has confirmed
-# a plan and put CRYPTOPANIC_API_KEY on Railway; the job itself will not change.
+# Public RSS feeds: free, no key, no account. They replace CryptoPanic, which is paid only
+# (Argy, 2026-10-07). Chosen for editorial quality over volume: sites that mostly publish
+# price predictions and sponsored posts would only add noise to the sentiment.
+# Checked on 2026-10-07: each one answers, parses and has headlines from the last 24 hours.
 RSS_FEEDS = {
     "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
     "cointelegraph": "https://cointelegraph.com/rss",
+    "decrypt": "https://decrypt.co/feed",
+    "theblock": "https://www.theblock.co/rss.xml",
+    "bitcoinmagazine": "https://bitcoinmagazine.com/feed",
+    "thedefiant": "https://thedefiant.io/feed",
 }
 # Says who is asking, which is polite towards the publishers and helps them contact us.
 USER_AGENT = "TradeMatrixAI/1.0 (+https://tradematrix-rho.vercel.app)"

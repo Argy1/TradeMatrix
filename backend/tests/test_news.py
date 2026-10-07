@@ -156,7 +156,9 @@ async def test_source_errors_become_feed_errors() -> None:
             await RssSource("example", "https://news.example.test/rss", http).fetch()
 
 
-async def test_default_sources_are_the_two_rss_feeds() -> None:
+async def test_default_sources_are_keyless_https_feeds() -> None:
     async with httpx.AsyncClient() as http:
         sources = get_news_sources(http)
-    assert [s.name for s in sources] == list(RSS_FEEDS) == ["coindesk", "cointelegraph"]
+    assert [s.name for s in sources] == list(RSS_FEEDS)
+    assert len(RSS_FEEDS) >= 4  # several publishers, so one being down is not a blackout
+    assert all(url.startswith("https://") for url in RSS_FEEDS.values())

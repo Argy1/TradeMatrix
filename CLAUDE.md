@@ -49,7 +49,7 @@ Brand: the product name is **TradeMatrix AI** and the line **"Created by Argy"**
 | ML | pandas, numpy, scikit-learn, XGBoost |
 | AI sentiment | Gemini API through the official `google-genai` Python SDK |
 | Market data | Binance public market-data API (REST klines + WebSocket) behind an adapter |
-| News | CryptoPanic API and RSS feeds (CoinDesk, Cointelegraph) |
+| News | Free public RSS feeds (CoinDesk, Cointelegraph, Decrypt, The Block, Bitcoin Magazine, The Defiant). CryptoPanic was dropped on 2026-10-07: paid only |
 | Push | Firebase Cloud Messaging (Flutter) |
 | Optional later | Redis on Railway for pub/sub and caching |
 

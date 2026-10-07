@@ -18,7 +18,7 @@
           | write
    Worker (Railway: "worker", APScheduler)
      |-- pulls candles      <- Binance public API (via adapter)
-     |-- pulls headlines    <- CryptoPanic + RSS
+     |-- pulls headlines    <- public RSS feeds
      |-- scores headlines   -> Gemini API
      |-- trains / predicts  -> XGBoost model files (Supabase Storage)
      |-- sends alerts       -> Firebase Cloud Messaging
@@ -45,8 +45,8 @@ One process, one instance only. Scheduled jobs (UTC):
 | `ingest_candles` | at each candle close + 5 s (1h: every hour; 4h: 00,04,08,12,16,20; 1d: 00:00) | Fetch newly closed candles for all active assets, upsert into `candles` |
 | `run_predictions` | right after `ingest_candles` for that timeframe | Build features, predict, blend sentiment, store a row in `predictions`, then evaluate alerts |
 | `resolve_outcomes` | after each candle close | Fill `prediction_outcomes` for predictions whose target candle just closed |
-| `ingest_news` | every 15 min | Fetch headlines (CryptoPanic, RSS), dedupe by URL, tag assets by keyword |
-| `score_sentiment` | every 15 min | Send unscored headlines to Gemini in batches, store results |
+| `ingest_news` | every 15 min (:02, :17, :32, :47) | Fetch headlines from the RSS feeds, dedupe by URL and by title, tag assets by keyword, delete headlines older than 90 days |
+| `score_sentiment` | every 15 min (:04, :19, :34, :49) | Send unscored headlines from the last 24 h to Gemini in batches, validate and store the results; stops at the daily budget |
 | `check_price_alerts` | every 1 min | Fetch last prices, evaluate price alerts |
 | `retrain_models` | weekly, Sunday 02:00 UTC | Walk-forward train per asset/timeframe; activate new model only if it is not worse |
 | `heartbeat` | every 5 min | Log a heartbeat and update `worker_heartbeat` for monitoring |
@@ -57,7 +57,7 @@ All jobs are **idempotent** (unique constraints + upserts) and take a Postgres a
 
 - `exchanges/base.py` defines `ExchangeClient` with `get_klines(symbol, timeframe, start, end, limit)`, `get_last_price(symbol)`, `stream_klines(symbols, timeframe)`.
 - `exchanges/binance.py` is the first implementation (public endpoints only, no key). Add `bybit.py` / `okx.py` / `kraken.py` only if Binance is not reachable. Selected by the `EXCHANGE` variable.
-- `news/` has `cryptopanic.py` and `rss.py`.
+- `news/` has `rss.py` (reader), `tagging.py` (coin keywords) and `ingest.py`. Sources are free public RSS feeds: CoinDesk, Cointelegraph, Decrypt, The Block, Bitcoin Magazine and The Defiant. CryptoPanic was dropped on 2026-10-07 because it is paid only. A new source is one more entry in `RSS_FEEDS`, or a new class with a `fetch()` method.
 
 ### Web app (`apps/web`)
 
@@ -106,9 +106,9 @@ See `.env.example` at the repo root for the full list and where each belongs.
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | api, worker | Server only; service role bypasses RLS |
 | `SUPABASE_JWKS_URL` / `SUPABASE_JWT_SECRET` | api | Verify user tokens |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | worker | Server only |
-| `SENTIMENT_BLEND_K`, `SENTIMENT_MAX_PER_RUN` | worker | Blend weight (0 at first) and cost guard |
+| `SENTIMENT_BLEND_K` | worker | Blend weight (0 at first) |
+| `SENTIMENT_MAX_PER_RUN`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_MAX_PER_DAY` | worker | Cost guard: headlines per run, per request and per UTC day |
 | `EXCHANGE` | api, worker | `binance` by default |
-| `CRYPTOPANIC_API_KEY` | worker | Optional (RSS works without it) |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | worker | JSON content as a Railway variable |
 | `CORS_ORIGINS` | api | Web origins allowed |
 | `NEXT_PUBLIC_*` | web | Only Supabase URL, anon key, API base URL, WS URL |

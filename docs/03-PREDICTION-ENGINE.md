@@ -103,6 +103,8 @@ Outputs of the backtest: `backend/reports/backtest_<asset>_<tf>_<date>.md` + a C
 - `event_type` enum: `regulation`, `hack`, `listing`, `etf`, `macro`, `partnership`, `technical`, `market`, `other`.
 - `reason`: ≤ 140 characters, plain text.
 
+The live prompt is `backend/app/sentiment/prompts.py` (`PROMPT_VERSION = "v1"`). It lists the coins that are active right now (16 since 2026-10-03, not the five in the skeleton below) and sends the headlines as a JSON array, so a headline cannot be mistaken for part of the instructions. Temperature 0 makes scores as repeatable as the model allows; two calls can still differ a little, which is one more reason each headline is scored once and stored.
+
 ### Prompt skeleton (put it in `prompts.py`, version it)
 
 ```

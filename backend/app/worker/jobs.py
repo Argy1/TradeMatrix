@@ -16,6 +16,7 @@ from app.data.ingest import ingest_candles
 from app.data.news import NewsSource
 from app.data.news.ingest import ingest_news
 from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
+from app.sentiment.score import Scorer, score_sentiment
 from app.timeframes import TIMEFRAMES, floor_time
 
 logger = logging.getLogger("worker")
@@ -117,6 +118,26 @@ def news_job(sources: Sequence[NewsSource]):
 
     async def work(session: AsyncSession) -> dict:
         return await ingest_news(session, sources)
+
+    return work
+
+
+def sentiment_job(scorer: Scorer, max_per_run: int, batch_size: int, max_per_day: int):
+    """Score new headlines with Gemini (every 15 minutes, shortly after `ingest_news`)."""
+    tries: dict[int, int] = {}  # failed attempts per headline, kept while the worker runs
+
+    async def work(session: AsyncSession) -> dict:
+        details = await score_sentiment(
+            session,
+            scorer,
+            max_per_run=max_per_run,
+            batch_size=batch_size,
+            max_per_day=max_per_day,
+            tries=tries,
+        )
+        if details["budget_reached"]:
+            log("sentiment_budget_reached", max_per_day=max_per_day)
+        return details
 
     return work
 

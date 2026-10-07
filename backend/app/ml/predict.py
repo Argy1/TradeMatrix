@@ -17,6 +17,7 @@ from app.ml.config import NEUTRAL_HIGH, NEUTRAL_LOW
 from app.ml.reasons import build_reasons
 from app.ml.registry import ModelBundle, from_bytes
 from app.ml.storage import ModelStorage
+from app.sentiment.aggregate import sentiment_by_asset
 from app.timeframes import TIMEFRAMES, last_closed_open_time
 
 # Candles loaded for live features. Training computed indicators over the full history; with
@@ -122,12 +123,15 @@ def make_prediction(
     snapshot = {  # JSON has no NaN: empty-by-design values are stored as null
         name: None if pd.isna(value) else float(value) for name, value in row.iloc[0].items()
     }
+    # In shadow mode sentiment did not move the probability, so it must not be shown as one
+    # of the reasons for the signal either. It only becomes a reason once it is blended in.
+    shown_sentiment = sentiment if blend_k > 0 and sentiment else None
     return {
         "p_ml": p_ml,
         "p_up": p_up,
         "label": label_for(p_up),
         "features": snapshot,
-        "reasons": build_reasons(snapshot, bundle.importances(), sentiment or None),
+        "reasons": build_reasons(snapshot, bundle.importances(), shown_sentiment),
     }
 
 
@@ -143,13 +147,22 @@ async def run_predictions(
     key (asset, timeframe, target candle) means a second run inserts nothing."""
     created = skipped = 0
     errors: list[str] = []
-    btc_id = next(a.id for a in await repo.list_assets(session) if a.symbol == "BTC")
+    assets = await repo.list_assets(session)
+    btc_id = next(a.id for a in assets if a.symbol == "BTC")
+    symbols = [a.symbol for a in assets]
+    # News sentiment per coin, as of the moment the predicted candle opens (one lookup per
+    # target time: 1h, 4h and 1d candles that open together share it).
+    sentiments: dict[datetime, dict[str, float]] = {}
     for model in await active_models(session, timeframes):
         expected = last_closed_open_time(now, model.timeframe)
         candles = await repo.fetch_candles(session, model.asset_id, model.timeframe, HISTORY)
         if not candles or candles[-1].open_time != expected:
             skipped += 1  # the newest candle is missing: never predict from stale data
             continue
+        target = expected + TIMEFRAMES[model.timeframe]
+        if target not in sentiments:
+            sentiments[target] = await sentiment_by_asset(session, symbols, target)
+        sentiment = sentiments[target].get(model.symbol, 0.0)
         try:
             btc = None
             if model.asset_id != btc_id:
@@ -158,7 +171,12 @@ async def run_predictions(
                 )
             bundle = await cache.get(model.artifact_path)
             result = make_prediction(
-                bundle, candle_frame(candles), btc, model.asset_id, sentiment=0.0, blend_k=blend_k
+                bundle,
+                candle_frame(candles),
+                btc,
+                model.asset_id,
+                sentiment=sentiment,
+                blend_k=blend_k,
             )
         except Exception as exc:  # one broken model must not block the others
             errors.append(f"{model.symbol} {model.timeframe}: {type(exc).__name__}: {exc}")
@@ -174,8 +192,8 @@ async def run_predictions(
                   base_close, p_ml, p_up, label, sentiment_agg, sentiment_k, model_version_id,
                   features, feature_values, reasons)
                 values (:asset_id, :tf, :base, :target, :base_close, :p_ml, :p_up, :label,
-                  0, :k, :model_id, cast(:features as jsonb), cast(:feature_values as real[]),
-                  cast(:reasons as jsonb))
+                  :sentiment, :k, :model_id, cast(:features as jsonb),
+                  cast(:feature_values as real[]), cast(:reasons as jsonb))
                 on conflict (asset_id, timeframe, target_open_time) do nothing
                 returning id
                 """
@@ -184,7 +202,8 @@ async def run_predictions(
                 "asset_id": model.asset_id,
                 "tf": model.timeframe,
                 "base": expected,
-                "target": expected + TIMEFRAMES[model.timeframe],
+                "target": target,
+                "sentiment": sentiment,
                 "base_close": Decimal(candles[-1].close),
                 "p_ml": result["p_ml"],
                 "p_up": result["p_up"],
