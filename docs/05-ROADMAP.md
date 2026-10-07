@@ -123,13 +123,14 @@ Goal: Gemini sentiment in **shadow mode**, plus alerts.
   - Convert the old rows and compare them with the JSON; drop the `features` column in a later migration only after they match.
   - Update the wording of rule 7 in `CLAUDE.md` ("features JSON" becomes "feature snapshot") and docs/03 if it names the column.
   - Status 2026-10-07: written and unit-tested on branch `phase-4` (migration `20261007120000_compact_feature_snapshot.sql`, `app/ml/predict.py`, `app/ml/registry.py`, `app/ml/snapshots.py`, rule 7 and docs/04 wording). Not applied and not deployed. The worker only writes the compact form when the names stored on the model version match the model's own list exactly; otherwise it keeps writing JSON, so the order of the steps below cannot produce a wrong snapshot.
-  - Deploy steps, after Gate 3 passes, all between two hourly runs (not in the first minute of an hour):
-    1. Merge `phase-4` into `main`.
-    2. Apply the migration (Supabase connector, then set its `schema_migrations` version to `20261007120000`).
-    3. `uv run pytest -m db`: the two snapshot tests stop skipping and must pass.
-    4. Deploy `worker` and `api`; the next hourly run must still log `created=16` (it still writes JSON at this point).
-    5. `uv run python -m app.ml.snapshots`: stores the feature names of the 68 existing model versions, converts the old signals and checks them. From the next run on, new signals are compact.
-    6. A few days later: `uv run python -m app.ml.snapshots --clear-json`, then a new migration that drops `predictions.features` once no row needs it.
+  - Deploy steps for the whole `phase-4` branch, after Gate 3 passes, all between two hourly runs (not in the first minutes of an hour). The order matters: database first, then the backend, then the website, so nothing ever calls something that does not exist yet.
+    1. Apply the migration (Supabase connector, then set its `schema_migrations` version to `20261007120000`).
+    2. On the `phase-4` checkout: `uv run pytest -m db`. The snapshot tests and the prediction-job SQL test stop skipping and must pass.
+    3. Set `GEMINI_API_KEY` (after Argy rotated it) and `GEMINI_MODEL` on the Railway `worker` service.
+    4. Deploy `api`, then `worker`, from the `phase-4` checkout (`railway up` uploads the local files, so it does not need the merge). The next hourly run must log `created=16` (still JSON snapshots at this point), and `/v1/status` must list `ingest_news` and `score_sentiment`.
+    5. Merge `phase-4` into `main`: Vercel then deploys the website with the news list. Run `npm run api:types` and check that `schema.d.ts` does not change (it was generated from the local API description).
+    6. `uv run python -m app.ml.snapshots`: stores the feature names of the 68 existing model versions, converts the old signals and checks them. From the next run on, new signals are compact.
+    7. A few days later: `uv run python -m app.ml.snapshots --clear-json`, then a new migration that drops `predictions.features` once no row needs it.
 - [ ] `ingest_news` from RSS feeds with dedupe and asset keyword tagging. (CryptoPanic was in the original plan; Argy dropped it on 2026-10-07 because it is paid only.)
   - Status 2026-10-07, branch `phase-4`: written and tested (`app/data/news/`). Six free feeds: CoinDesk, Cointelegraph, Decrypt, The Block, Bitcoin Magazine, The Defiant, each checked that day (answers, parses, has headlines from the last 24 hours). Safe XML parsing with `defusedxml`, tracking parameters removed from links, dedupe by URL and by normalized title, keyword tagging for the 16 coins, headlines older than 90 days pruned. The worker job runs every 15 minutes at :02/:17/:32/:47. Not deployed.
   - Feeds tried and not used: Blockworks and DL News (their feeds were months stale), CryptoSlate (refuses automated readers), and several high-volume sites whose price-prediction and sponsored posts would add noise to the sentiment.
@@ -138,7 +139,9 @@ Goal: Gemini sentiment in **shadow mode**, plus alerts.
 - [ ] `score_sentiment` job; recency-weighted aggregation per asset; store `sentiment_agg` on predictions (`SENTIMENT_BLEND_K=0`).
   - Status 2026-10-07, branch `phase-4`: written and tested (`app/sentiment/score.py`, `aggregate.py`; `run_predictions` stores the coin's sentiment as of the moment the predicted candle opens, and in shadow mode never lists it as a reason). Job at :04/:19/:34/:49, at most 400 headlines per UTC day. Not deployed.
   - Before deploying: `GEMINI_API_KEY` (rotated by Argy) and `GEMINI_MODEL` must be set on the Railway `worker` service; without them the worker runs but logs `sentiment_disabled`. Argy to check his project's real request limits at https://aistudio.google.com/rate-limit (Google does not publish them per model).
+  - Known limit to look at in the evaluation: one event reported by several publishers under different titles counts once per publisher (the title dedupe only catches identical titles).
 - [ ] News list with sentiment badges on the coin page.
+  - Status 2026-10-07, branch `phase-4`: `GET /v1/news` (`app/api/news.py`) and the "News tone" section on the coin page (`apps/web/src/components/news-list.tsx`) are written and tested. Checked in the browser at desktop and phone width with real headlines, using a local API whose database transaction was never committed (first run: 221 headlines fetched, 160 stored, 40 scored with 2 Gemini requests). `PredictionOut.sentiment_used` tells the page whether news is part of the signal; while `k = 0` the page says news is context only. Not deployed.
 - [ ] Alerts: CRUD API, evaluation after each prediction + `check_price_alerts` every minute, cooldowns, `notifications` rows, in-app notification list on web.
 - [ ] After at least 4 weeks of shadow data: evaluation notebook (does `p_ml + k * sentiment_agg` improve Brier/accuracy?). Record the decision and the final `k` here.
 - [ ] Optional: email alerts (Resend) after in-app alerts work.

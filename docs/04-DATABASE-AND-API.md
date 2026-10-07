@@ -24,7 +24,7 @@ Prediction semantics (important):
 - `base_open_time` = open time of the last **closed** candle used; `base_close` = its close.
 - `target_open_time` = `base_open_time + timeframe`. The prediction says whether the close of that candle will be above `base_close`.
 - Outcome: `actual_direction = 'up'` if `target_close > base_close`, else `'down'` (a flat close counts as down, matching the training label). `correct` is `null` when the label was `neutral`.
-- `sentiment_k = 0` means the row was produced in shadow mode (sentiment stored but not blended).
+- `sentiment_k = 0` means the row was produced in shadow mode (sentiment stored but not blended). The API reports this as `sentiment_used: false`; in that case no reason with code `sentiment` is listed, and the apps say that news is context only.
 
 ## Security model
 
@@ -55,7 +55,7 @@ Conventions:
 | `GET /v1/predictions/latest?symbol=BTC&tf=1h` | Current signal (example below) |
 | `GET /v1/predictions/history?symbol=BTC&tf=1h&limit=50&before=` | Past signals with outcomes |
 | `GET /v1/performance?symbol=BTC&tf=1h&days=30` | Track record (example below). `symbol` optional (all coins), `tf` optional |
-| `GET /v1/news?symbol=BTC&limit=30` | Headlines with sentiment (score, confidence, event type, reason) |
+| `GET /v1/news?symbol=BTC&limit=30` | Newest headlines (source, title, link, time, coins) with `sentiment` (`label`, score, confidence, event type, reason), or `sentiment: null` while a headline is not scored yet. `label` is decided by the server: `bullish` from +0.1, `bearish` from -0.1, else `neutral`. `symbol` is optional; `limit` max 100 |
 
 ### Protected (login)
 
@@ -84,6 +84,7 @@ Conventions:
     {"code": "sentiment", "text": "News sentiment +0.31"}
   ],
   "sentiment_agg": 0.31,
+  "sentiment_used": true,
   "model": {"id": 12, "trained_at": "2026-09-28T02:10:00Z", "status": "ok"},
   "recent_accuracy": {"model": 0.541, "naive_baseline": 0.512, "n": 200},
   "disclaimer": "Signals are probabilistic estimates ...",

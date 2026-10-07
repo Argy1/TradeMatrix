@@ -19,6 +19,15 @@ RSS_FEEDS = {
     "bitcoinmagazine": "https://bitcoinmagazine.com/feed",
     "thedefiant": "https://thedefiant.io/feed",
 }
+# How each source is named next to a headline in the apps.
+SOURCE_NAMES = {
+    "coindesk": "CoinDesk",
+    "cointelegraph": "Cointelegraph",
+    "decrypt": "Decrypt",
+    "theblock": "The Block",
+    "bitcoinmagazine": "Bitcoin Magazine",
+    "thedefiant": "The Defiant",
+}
 # Says who is asking, which is polite towards the publishers and helps them contact us.
 USER_AGENT = "TradeMatrixAI/1.0 (+https://tradematrix-rho.vercel.app)"
 

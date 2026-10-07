@@ -113,7 +113,10 @@ class PredictionOut(BaseModel):
     target_close_time: datetime
     base_close: str
     reasons: list[ReasonOut]
-    sentiment_agg: float
+    sentiment_agg: float  # news tone for this coin when the signal was made, about -1..+1
+    # False = shadow mode: the tone is stored but did not change p_up (docs/03). The apps use
+    # this to say honestly whether news is part of the signal.
+    sentiment_used: bool
     model: ModelInfo
     recent_accuracy: RecentAccuracy
     disclaimer: str = DISCLAIMER
@@ -190,3 +193,29 @@ class PerformanceSummary(BaseModel):
     days: int
     overall: PerformanceOut
     rows: list[PerformanceOut]
+
+
+class SentimentOut(BaseModel):
+    """Gemini's reading of one headline. `label` is decided here so clients only draw it."""
+
+    label: str  # bullish / bearish / neutral
+    score: float  # -1 (bearish for price) ... +1 (bullish)
+    confidence: float  # 0 ... 1, how clear the price impact is
+    event_type: str
+    reason: str
+
+
+class NewsItemOut(BaseModel):
+    id: int
+    source: str  # "coindesk"
+    source_name: str  # "CoinDesk"
+    title: str
+    url: str  # link to the original article; we never store or show the article text
+    published_at: datetime
+    symbols: list[str]  # coins the headline is about
+    sentiment: SentimentOut | None  # null = not scored yet
+
+
+class NewsResponse(BaseModel):
+    symbol: str | None
+    items: list[NewsItemOut]

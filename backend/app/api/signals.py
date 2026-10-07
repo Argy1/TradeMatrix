@@ -85,7 +85,7 @@ async def latest_prediction(session: Db, symbol: str, tf: Timeframe) -> Predicti
             text(
                 """
                 select p.label, p.p_up, p.base_open_time, p.target_open_time, p.base_close,
-                       p.reasons, p.sentiment_agg, m.id, m.trained_at, m.status
+                       p.reasons, p.sentiment_agg, p.sentiment_k, m.id, m.trained_at, m.status
                 from predictions p join model_versions m on m.id = p.model_version_id
                 where p.asset_id = :a and p.timeframe = :tf
                 order by p.target_open_time desc limit 1
@@ -96,7 +96,8 @@ async def latest_prediction(session: Db, symbol: str, tf: Timeframe) -> Predicti
     ).first()
     if row is None:
         raise ApiError(404, "not_found", "No prediction yet for this coin and timeframe")
-    label, p_up, base_open, target_open, base_close, reasons, sentiment, mid, trained, status = row
+    label, p_up, base_open, target_open, base_close, reasons, sentiment, k = row[:8]
+    mid, trained, status = row[8:]
     recent = performance(await resolved_rows(session, asset.id, tf, limit=200))
     return PredictionOut(
         symbol=asset.symbol,
@@ -108,7 +109,8 @@ async def latest_prediction(session: Db, symbol: str, tf: Timeframe) -> Predicti
         target_close_time=target_open + TIMEFRAMES[tf],
         base_close=price(base_close),
         reasons=[ReasonOut(**reason) for reason in reasons],
-        sentiment_agg=float(sentiment),
+        sentiment_agg=round(float(sentiment), 3),
+        sentiment_used=float(k) > 0,
         model=ModelInfo(id=mid, trained_at=trained, status=status),
         recent_accuracy=RecentAccuracy(
             model=recent["accuracy"],

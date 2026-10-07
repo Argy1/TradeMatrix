@@ -164,6 +164,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get News
+         * @description Newest headlines first. With `symbol`, only headlines about that coin: tagged by
+         *     keyword when stored, or named by Gemini when scored.
+         */
+        get: operations["get_news_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/watchlist": {
         parameters: {
             query?: never;
@@ -387,6 +408,34 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** NewsItemOut */
+        NewsItemOut: {
+            /** Id */
+            id: number;
+            /** Source */
+            source: string;
+            /** Source Name */
+            source_name: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Symbols */
+            symbols: string[];
+            sentiment: components["schemas"]["SentimentOut"] | null;
+        };
+        /** NewsResponse */
+        NewsResponse: {
+            /** Symbol */
+            symbol: string | null;
+            /** Items */
+            items: components["schemas"]["NewsItemOut"][];
+        };
         /** OutcomeOut */
         OutcomeOut: {
             /** Target Close */
@@ -475,6 +524,8 @@ export interface components {
             reasons: components["schemas"]["ReasonOut"][];
             /** Sentiment Agg */
             sentiment_agg: number;
+            /** Sentiment Used */
+            sentiment_used: boolean;
             model: components["schemas"]["ModelInfo"];
             recent_accuracy: components["schemas"]["RecentAccuracy"];
             /**
@@ -507,6 +558,22 @@ export interface components {
             n: number;
             /** Low Sample */
             low_sample: boolean;
+        };
+        /**
+         * SentimentOut
+         * @description Gemini's reading of one headline. `label` is decided here so clients only draw it.
+         */
+        SentimentOut: {
+            /** Label */
+            label: string;
+            /** Score */
+            score: number;
+            /** Confidence */
+            confidence: number;
+            /** Event Type */
+            event_type: string;
+            /** Reason */
+            reason: string;
         };
         /** SignalChip */
         SignalChip: {
@@ -773,6 +840,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PerformanceSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_news_v1_news_get: {
+        parameters: {
+            query?: {
+                symbol?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsResponse"];
                 };
             };
             /** @description Validation Error */

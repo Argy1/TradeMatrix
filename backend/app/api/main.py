@@ -13,6 +13,7 @@ from slowapi.util import get_remote_address
 from app import db
 from app.api.account import router as account_router
 from app.api.errors import install_error_handlers
+from app.api.news import router as news_router
 from app.api.signals import router as signals_router
 from app.api.stream import hub
 from app.api.stream import router as stream_router
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     app.include_router(v1_router)
     app.include_router(signals_router)
+    app.include_router(news_router)
     app.include_router(stream_router)
     app.include_router(account_router)
 

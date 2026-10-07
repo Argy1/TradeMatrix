@@ -20,6 +20,7 @@ export type SignalChip = Schemas["SignalChip"];
 export type Candle = Schemas["CandleOut"];
 export type HistoryItem = Schemas["HistoryItem"];
 export type Performance = Schemas["PerformanceOut"];
+export type NewsItem = Schemas["NewsItemOut"];
 export type Timeframe = "1h" | "4h" | "1d";
 
 export const TIMEFRAMES: Timeframe[] = ["1h", "4h", "1d"];

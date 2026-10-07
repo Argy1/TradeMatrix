@@ -101,4 +101,6 @@ def test_real_signal_endpoints(real_client: TestClient) -> None:
 
     perf = real_client.get("/v1/performance?days=30").json()
     assert perf["n_predictions"] >= 15
-    assert "naive" in perf["baseline"] and perf["low_sample"] is True
+    # low_sample was true in the first days; with a longer live record it becomes false.
+    assert "naive" in perf["baseline"] and isinstance(perf["low_sample"], bool)
+    assert latest["sentiment_used"] is False  # shadow mode: news does not move p_up yet

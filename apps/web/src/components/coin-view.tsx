@@ -11,6 +11,7 @@ import { formatChange, formatDateTime, formatPrice, timeframeWords } from "@/lib
 import { asDirection } from "@/lib/signal";
 
 import { DIRECTION_TEXT, DirectionIcon, DirectionLabel } from "./direction";
+import { NewsList } from "./news-list";
 import { PriceChart } from "./price-chart";
 import { SignalCard } from "./signal-card";
 import { ErrorState, Skeleton } from "./states";
@@ -286,10 +287,11 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
             {history.data ? <RecentSignals items={history.data.items} /> : <Skeleton className="h-24" />}
           </section>
 
-          <section aria-labelledby="news" className="glass space-y-2 p-6">
-            <h2 id="news" className="font-display text-lg font-semibold">News tone for {name}</h2>
-            <p className="text-sm text-muted">Headlines with a sentiment badge arrive in the next update.</p>
-          </section>
+          <NewsList
+            symbol={symbol}
+            name={name}
+            sentimentUsed={prediction.data?.sentiment_used ?? false}
+          />
         </div>
       </div>
     </div>

@@ -51,6 +51,22 @@ export function formatDateTime(iso: string): string {
   return `${date}, ${formatClock(iso)}`;
 }
 
+/** "just now" / "12 min ago" / "3 h ago" / "2 d ago" */
+export function formatAgo(iso: string, now: Date = new Date()): string {
+  const minutes = Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.floor(hours / 24)} d ago`;
+}
+
+/** A sentiment score always shows its sign: 0.31 -> "+0.31", -0.2 -> "-0.20". */
+export function formatScore(score: number): string {
+  const rounded = Number(score.toFixed(2)); // -0.004 becomes 0, so it never prints "-0.00"
+  return `${rounded >= 0 ? "+" : "-"}${Math.abs(rounded).toFixed(2)}`;
+}
+
 /** "in 41 min" / "in 2 h 5 min" / "now" */
 export function formatCountdown(targetIso: string, now: Date = new Date()): string {
   const minutes = Math.round((new Date(targetIso).getTime() - now.getTime()) / 60_000);

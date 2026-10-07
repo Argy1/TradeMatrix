@@ -49,6 +49,15 @@ export function usePerformance(params: { symbol?: string; tf?: Timeframe; days: 
   });
 }
 
+/** Recent headlines about one coin. The worker looks for news every 15 minutes. */
+export function useNews(symbol: string, limit = 8) {
+  return useQuery({
+    queryKey: ["news", symbol, limit],
+    queryFn: () => unwrap(api.GET("/v1/news", { params: { query: { symbol, limit } } })),
+    refetchInterval: 300_000,
+  });
+}
+
 /** Every coin x timeframe in one request (keeps the track-record page under the rate limit). */
 export function usePerformanceSummary(days: number) {
   return useQuery({
