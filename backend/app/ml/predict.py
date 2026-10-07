@@ -32,13 +32,16 @@ class ActiveModel:
     timeframe: str
     artifact_path: str
     status: str
+    # Feature names saved once on the model version; None for models stored before that existed.
+    feature_names: list[str] | None = None
 
 
 async def active_models(session: AsyncSession, timeframes: list[str]) -> list[ActiveModel]:
     rows = await session.execute(
         text(
             """
-            select m.id, m.asset_id, a.symbol, m.timeframe, m.artifact_path, m.status
+            select m.id, m.asset_id, a.symbol, m.timeframe, m.artifact_path, m.status,
+                   m.feature_names
             from model_versions m join assets a on a.id = m.asset_id
             where m.is_active and a.active and m.timeframe = any(:timeframes)
             order by m.timeframe, a.id
@@ -77,6 +80,21 @@ def candle_frame(candles: list[Candle]) -> pd.DataFrame:
 
 def label_for(p_up: float) -> str:
     return "up" if p_up > NEUTRAL_HIGH else "down" if p_up < NEUTRAL_LOW else "neutral"
+
+
+def snapshot_columns(
+    snapshot: dict[str, float | None], stored_names: list[str] | None
+) -> tuple[str | None, list[float | None] | None]:
+    """How the audit snapshot is stored: (`features` JSON, `feature_values` array), one is None.
+
+    The compact form keeps only the values; their names are stored once on the model version.
+    A list of numbers under the wrong names would be a wrong audit trail that raises no error,
+    so the compact form is used only when the stored names match this snapshot name by name,
+    in the same order. Anything else falls back to the JSON, which carries its own names.
+    """
+    if stored_names is not None and list(snapshot) == list(stored_names):
+        return None, list(snapshot.values())
+    return json.dumps(snapshot), None
 
 
 def make_prediction(
@@ -148,14 +166,16 @@ async def run_predictions(
         if result is None:
             skipped += 1
             continue
+        features_json, feature_values = snapshot_columns(result["features"], model.feature_names)
         inserted = await session.execute(
             text(
                 """
                 insert into predictions (asset_id, timeframe, base_open_time, target_open_time,
                   base_close, p_ml, p_up, label, sentiment_agg, sentiment_k, model_version_id,
-                  features, reasons)
+                  features, feature_values, reasons)
                 values (:asset_id, :tf, :base, :target, :base_close, :p_ml, :p_up, :label,
-                  0, :k, :model_id, cast(:features as jsonb), cast(:reasons as jsonb))
+                  0, :k, :model_id, cast(:features as jsonb), cast(:feature_values as real[]),
+                  cast(:reasons as jsonb))
                 on conflict (asset_id, timeframe, target_open_time) do nothing
                 returning id
                 """
@@ -171,7 +191,8 @@ async def run_predictions(
                 "label": result["label"],
                 "k": blend_k,
                 "model_id": model.id,
-                "features": json.dumps(result["features"]),
+                "features": features_json,
+                "feature_values": feature_values,
                 "reasons": json.dumps(result["reasons"]),
             },
         )

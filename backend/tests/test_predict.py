@@ -1,5 +1,6 @@
 """Live prediction pieces: reasons, the prediction row, the model file and storage calls."""
 
+import json
 from datetime import UTC, datetime
 
 import httpx
@@ -7,9 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.features.build import build_dataset, feature_columns
+from app.features.build import build_dataset, build_features, feature_columns
 from app.ml.config import NEUTRAL_HIGH, NEUTRAL_LOW, XGB_PARAMS
-from app.ml.predict import label_for, make_prediction
+from app.ml.predict import label_for, make_prediction, snapshot_columns
 from app.ml.reasons import build_reasons
 from app.ml.registry import ModelBundle, from_bytes, to_bytes
 from app.ml.storage import ModelStorage
@@ -48,8 +49,31 @@ def test_prediction_row_is_complete_and_bounded(bundle: ModelBundle) -> None:
     assert result is not None
     assert 0.01 <= result["p_up"] <= 0.99
     assert result["label"] == label_for(result["p_up"])
-    assert set(result["features"]) == set(bundle.model.features)  # the audit snapshot
+    # The audit snapshot: the model's features, in the model's own order.
+    assert list(result["features"]) == list(bundle.model.features)
     assert 1 <= len(result["reasons"]) <= 3
+
+
+def test_compact_snapshot_keeps_the_values_the_model_saw(bundle: ModelBundle) -> None:
+    """Compact form = values only, in the order of the names stored on the model version."""
+    data = candles()
+    result = make_prediction(bundle, data, None, asset_id=1)
+    features_json, values = snapshot_columns(result["features"], list(bundle.model.features))
+    assert features_json is None and len(values) == len(bundle.model.features)
+    # Names (stored once) + values (stored per signal) give back the same snapshot.
+    assert dict(zip(bundle.model.features, values, strict=True)) == result["features"]
+    # The database keeps them as 4-byte numbers, the precision XGBoost itself reads.
+    seen_by_model = build_features(data).iloc[-1][bundle.model.features].to_numpy(np.float32)
+    np.testing.assert_array_equal(np.array(values, dtype=np.float32), seen_by_model)
+
+
+def test_snapshot_falls_back_to_json_unless_names_match_exactly(bundle: ModelBundle) -> None:
+    """A list of numbers under the wrong names would be a silent error, so any doubt = JSON."""
+    snapshot = make_prediction(bundle, candles(), None, asset_id=1)["features"]
+    names = list(bundle.model.features)
+    for stored in (None, names[::-1], names[:-1], [*names, "extra"]):
+        features_json, values = snapshot_columns(snapshot, stored)
+        assert values is None and json.loads(features_json) == snapshot
 
 
 def test_shadow_mode_never_moves_the_probability(bundle: ModelBundle) -> None:
@@ -141,5 +165,9 @@ def test_pooled_model_predicts_btc_without_btc_context() -> None:
     bundle = ModelBundle(model, "ALL", "1d", "test", times[0], cut1)
     result = make_prediction(bundle, candles(seed=1), None, asset_id=1)
     assert result is not None
-    assert result["features"]["btc_ret_1"] is None  # empty by design, stored as JSON null
+    assert result["features"]["btc_ret_1"] is None  # empty by design, stored as null
     assert result["features"]["asset_id"] == 1.0
+    # Compact form: the empty value keeps its place in the list, so the order never shifts.
+    _, values = snapshot_columns(result["features"], list(bundle.model.features))
+    assert values[bundle.model.features.index("btc_ret_1")] is None
+    assert values[bundle.model.features.index("asset_id")] == 1.0

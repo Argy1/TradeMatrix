@@ -13,7 +13,7 @@ The SQL is in `supabase/migrations/20261003000000_init.sql` (ready to apply with
 | `news_items` | Headlines, deduped by URL and title hash, tagged with asset symbols | worker |
 | `sentiments` | Gemini result per headline (score, confidence, event type, reason, model, prompt version) | worker |
 | `model_versions` | Trained models, metrics JSON, Storage path, `is_active` (one per asset + timeframe), `status` | worker |
-| `predictions` | One row per asset + timeframe + target candle: `p_ml`, final `p_up`, label, sentiment, features, reasons, model version | worker |
+| `predictions` | One row per asset + timeframe + target candle: `p_ml`, final `p_up`, label, sentiment, feature snapshot (`feature_values`, named by `model_versions.feature_names`; the view `prediction_features` shows it as JSON), reasons, model version | worker |
 | `prediction_outcomes` | Filled when the target candle closes: actual direction, `correct`, return | worker |
 | `watchlists`, `alerts`, `device_tokens` | Per-user settings | api (as the user) |
 | `notifications` | In-app notifications | worker |

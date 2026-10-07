@@ -4,17 +4,21 @@ Each test works inside a transaction that is rolled back, with candles dated in 
 nothing is ever left behind and real data is never touched.
 """
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.config import BACKEND_DIR, REPO_ROOT, Settings
 from app.data import repo
 from app.data.exchanges.base import Candle
+from app.ml import snapshots
 
 pytestmark = pytest.mark.db
 T0 = datetime(2001, 1, 1, tzinfo=UTC)
@@ -85,3 +89,121 @@ async def test_heartbeat_keeps_the_last_success_after_a_failure(session: AsyncSe
     beat = next(h for h in await repo.list_heartbeats(session) if h.job_name == "test_job")
     assert beat.last_error == "boom"
     assert beat.last_success_at is not None
+
+
+# ---- Compact feature snapshot (migration 20261007120000_compact_feature_snapshot) ----
+
+
+def as_dict(value: object) -> dict:
+    return value if isinstance(value, dict) else json.loads(value)
+
+
+async def snapshot_model(session: AsyncSession, names: list[str]) -> tuple[int, int]:
+    """An inactive BTC 1h model version just for the test: (asset id, model version id)."""
+    migrated = await session.execute(
+        text(
+            "select 1 from information_schema.columns where table_schema = 'public' "
+            "and table_name = 'predictions' and column_name = 'feature_values'"
+        )
+    )
+    if migrated.first() is None:
+        pytest.skip("migration 20261007120000_compact_feature_snapshot is not applied yet")
+    btc = await repo.get_asset(session, "BTC")
+    model_id = await session.execute(
+        text(
+            "insert into model_versions (asset_id, timeframe, train_start, train_end, "
+            "artifact_path, feature_names) "
+            "values (:a, '1h', :t, :t, 'test/none.joblib', cast(:names as text[])) returning id"
+        ),
+        {"a": btc.id, "t": T0, "names": names},
+    )
+    return btc.id, model_id.scalar_one()
+
+
+async def add_signal(
+    session: AsyncSession,
+    asset_id: int,
+    model_id: int,
+    hours: int,
+    *,
+    features: dict | None = None,
+    values: list[float | None] | None = None,
+) -> int:
+    inserted = await session.execute(
+        text(
+            "insert into predictions (asset_id, timeframe, base_open_time, target_open_time, "
+            "base_close, p_ml, p_up, label, model_version_id, features, feature_values) "
+            "values (:a, '1h', :base, :target, 100, 0.6, 0.6, 'up', :m, "
+            "cast(:features as jsonb), cast(:values as real[])) returning id"
+        ),
+        {
+            "a": asset_id,
+            "m": model_id,
+            "base": T0 + timedelta(hours=hours),
+            "target": T0 + timedelta(hours=hours + 1),
+            "features": None if features is None else json.dumps(features),
+            "values": values,
+        },
+    )
+    return inserted.scalar_one()
+
+
+async def stored_snapshot(session: AsyncSession, prediction_id: int) -> tuple:
+    row = await session.execute(
+        text("select features, feature_values from predictions where id = :id"),
+        {"id": prediction_id},
+    )
+    return tuple(row.one())
+
+
+async def test_compact_snapshot_reads_back_with_its_names(session: AsyncSession) -> None:
+    asset_id, model_id = await snapshot_model(session, ["rsi14", "btc_ret_1", "ret_1"])
+    compact = await add_signal(session, asset_id, model_id, 0, values=[61.5, None, -0.25])
+    legacy = await add_signal(session, asset_id, model_id, 1, features={"rsi14": 40.0})
+
+    rows = await session.execute(
+        text(
+            "select prediction_id, features from prediction_features "
+            "where prediction_id = any(:ids)"
+        ),
+        {"ids": [compact, legacy]},
+    )
+    seen = {row.prediction_id: as_dict(row.features) for row in rows}
+    # Names come from the model version, values from the signal; null keeps its place.
+    assert seen[compact] == {"rsi14": 61.5, "btc_ret_1": None, "ret_1": -0.25}
+    assert seen[legacy] == {"rsi14": 40.0}  # old rows still read from their JSON
+
+    # A signal with no snapshot at all is refused: rule 7, every prediction is auditable.
+    with pytest.raises(IntegrityError):
+        async with session.begin_nested():  # savepoint, so the test transaction survives
+            await add_signal(session, asset_id, model_id, 2)
+
+
+async def test_old_json_snapshots_convert_and_are_checked(session: AsyncSession) -> None:
+    asset_id, model_id = await snapshot_model(session, ["rsi14", "btc_ret_1", "ret_1"])
+    old = await add_signal(
+        session, asset_id, model_id, 0, features={"ret_1": -0.25, "rsi14": 61.5, "btc_ret_1": None}
+    )
+    # Different names than the model's: must be left alone, never squeezed into the list.
+    other = await add_signal(session, asset_id, model_id, 1, features={"rsi14": 61.5})
+
+    assert await snapshots.convert_json_rows(session, model_id) == 1
+    assert await snapshots.convert_json_rows(session, model_id) == 0  # again: nothing to do
+    assert (await stored_snapshot(session, old))[1] == [61.5, None, -0.25]  # the model's order
+    assert (await stored_snapshot(session, other))[1] is None
+    assert await snapshots.count_mismatches(session, model_id) == 0
+
+    # The check must notice a value sitting under the wrong name.
+    await session.execute(
+        text("update predictions set feature_values = '{-0.25,null,61.5}' where id = :id"),
+        {"id": old},
+    )
+    assert await snapshots.count_mismatches(session, model_id) == 1
+    await session.execute(
+        text("update predictions set feature_values = '{61.5,null,-0.25}' where id = :id"),
+        {"id": old},
+    )
+
+    assert await snapshots.clear_json_rows(session, model_id) == 1
+    assert (await stored_snapshot(session, old))[0] is None
+    assert as_dict((await stored_snapshot(session, other))[0]) == {"rsi14": 61.5}

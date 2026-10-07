@@ -122,6 +122,14 @@ Goal: Gemini sentiment in **shadow mode**, plus alerts.
   - Test: a snapshot reads back to the same values in the same order (the main risk is a name/value order mix-up).
   - Convert the old rows and compare them with the JSON; drop the `features` column in a later migration only after they match.
   - Update the wording of rule 7 in `CLAUDE.md` ("features JSON" becomes "feature snapshot") and docs/03 if it names the column.
+  - Status 2026-10-07: written and unit-tested on branch `phase-4` (migration `20261007120000_compact_feature_snapshot.sql`, `app/ml/predict.py`, `app/ml/registry.py`, `app/ml/snapshots.py`, rule 7 and docs/04 wording). Not applied and not deployed. The worker only writes the compact form when the names stored on the model version match the model's own list exactly; otherwise it keeps writing JSON, so the order of the steps below cannot produce a wrong snapshot.
+  - Deploy steps, after Gate 3 passes, all between two hourly runs (not in the first minute of an hour):
+    1. Merge `phase-4` into `main`.
+    2. Apply the migration (Supabase connector, then set its `schema_migrations` version to `20261007120000`).
+    3. `uv run pytest -m db`: the two snapshot tests stop skipping and must pass.
+    4. Deploy `worker` and `api`; the next hourly run must still log `created=16` (it still writes JSON at this point).
+    5. `uv run python -m app.ml.snapshots`: stores the feature names of the 68 existing model versions, converts the old signals and checks them. From the next run on, new signals are compact.
+    6. A few days later: `uv run python -m app.ml.snapshots --clear-json`, then a new migration that drops `predictions.features` once no row needs it.
 - [ ] `ingest_news` (RSS + CryptoPanic) with dedupe and asset keyword tagging.
 - [ ] Gemini client (`google-genai`): JSON schema, temperature 0, validation, retry, budget guard, prompt versioning + tests with mocked and malformed responses.
 - [ ] `score_sentiment` job; recency-weighted aggregation per asset; store `sentiment_agg` on predictions (`SENTIMENT_BLEND_K=0`).

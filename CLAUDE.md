@@ -32,7 +32,7 @@ Brand: the product name is **TradeMatrix AI** and the line **"Created by Argy"**
 4. **Secrets stay secret.** Never commit `.env*` files (except `.env.example`). The Gemini key and the Supabase service-role key exist only on the server (Railway), never in the web or mobile apps.
 5. **Clients are thin.** Web and mobile never compute indicators or probabilities. They only draw what the API returns.
 6. **Gemini is called only from the backend worker**, with a JSON schema, temperature 0, and validated output.
-7. **Every prediction is auditable:** store `model_version_id`, the feature snapshot (`features` JSON) and the sentiment value used.
+7. **Every prediction is auditable:** store `model_version_id`, the feature snapshot (values in `predictions.feature_values`, their names once in `model_versions.feature_names`; older rows keep the `features` JSON) and the sentiment value used.
 8. **Jobs are idempotent.** Re-running a job must never create duplicate rows (use unique constraints and upserts).
 9. **Signals must be easy to understand:** direction word + icon + probability + plain sentence + reasons + reliability vs baseline, always together (docs/08). Never convey direction by color alone.
 10. **Stay in v1 scope** (docs/01). Do not add features, markets or paid plans without asking.
@@ -83,6 +83,7 @@ TradeMatrix/
 - Database: `npx supabase db push` (apply `supabase/migrations`). The Supabase CLI runs through `npx`, there is no global install. While the CLI is logged in to a different Supabase account, apply migrations through the Supabase connector or with `npx supabase db push --db-url <session pooler URL>`.
 - Gate 0 check: `uv run scripts/gate0_check.py` (from the repo root; reads the root `.env`)
 - Models (from backend/): `uv run python -m app.ml.tune` (choose settings on 2021-2024) / `uv run python -m app.ml.backtest` (evaluate) / `uv run python -m app.ml.train_models` (train, store, activate). Then redeploy `worker` so it loads the new files.
+- Audit snapshots (from backend/): `uv run python -m app.ml.snapshots` stores the feature names of older models and converts older signals to the compact form, with a check; `--clear-json` removes the converted JSON afterwards. Read a snapshot with `select * from prediction_features where prediction_id = ...`.
 - Python: `uv` manages Python 3.12 (the system Python is 3.14 and is not used).
 
 If a command here does not exist yet, create it as part of the task and update this section.
@@ -119,6 +120,7 @@ If a command here does not exist yet, create it as part of the task and update t
 Update this block as work progresses.
 
 - Current phase: **Phase 3 — Web MVP** (see docs/05-ROADMAP.md). Gates 0, 1 and 2 passed on 2026-10-03 (Gate 2 by Argy's decision, see docs/05).
+- **Branch `phase-4`** (started 2026-10-07, Argy's decision): Phase 4 is being built here while Gate 3 is still counting. It is NOT merged, NOT migrated and NOT deployed. `main` is what runs in production. Merge, apply migrations and deploy the worker only after Gate 3 passes (earliest 2026-10-10 16:00 WIB); the steps are in docs/05 under Phase 4.
 - Models: 48 active (16 coins x 1h/4h/1d) in the private `models` bucket and `model_versions`. `ok`: 1h for BTC, ETH, BNB, XRP, ADA, LINK, AVAX, LTC, DOT, BCH, XLM. Everything else is `degraded` (all 4h, the pooled 1d, and 1h for SOL, DOGE, UNI, NEAR, TRX). The Railway `worker` ingests, predicts and resolves outcomes every hour; notebook `backend/notebooks/01_backtest_walkthrough.ipynb`.
 - Phase 3 so far: signal endpoints and `/ws/stream` in the API; `apps/web` with the design system, markets home, coin page (chart, live updates, signal card), track record and About. Run locally with `cd apps/web && npm run dev` (reads `apps/web/.env.local`).
 - Web is live at https://tradematrix-rho.vercel.app (Vercel project `tradematrix`, auto-deploys on push to `main`). Email login + watchlist done; Google sign-in later.

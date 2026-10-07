@@ -121,8 +121,12 @@ async def register(
     metrics: dict,
     train_start: datetime,
     train_end: datetime,
+    feature_names: list[str],
 ) -> list[int]:
-    """Make this model the active one for each asset (one active model per asset+timeframe)."""
+    """Make this model the active one for each asset (one active model per asset+timeframe).
+
+    `feature_names` is the model's own feature list, in its order. Each signal then stores only
+    the values (predictions.feature_values) and reads their names from here."""
     status = "ok" if metrics["beats_baselines"] else "degraded"
     ids = []
     for asset_id in asset_ids:
@@ -139,9 +143,9 @@ async def register(
                     text(
                         """
                         insert into model_versions (asset_id, timeframe, train_start, train_end,
-                          metrics, artifact_path, is_active, status)
+                          metrics, artifact_path, is_active, status, feature_names)
                         values (:a, :tf, :start, :end, cast(:metrics as jsonb), :path, true,
-                          :status)
+                          :status, cast(:names as text[]))
                         returning id
                         """
                     ),
@@ -153,6 +157,7 @@ async def register(
                         "metrics": json.dumps(metrics),
                         "path": artifact_path,
                         "status": status,
+                        "names": list(feature_names),
                     },
                 )
             ).scalar_one()
@@ -185,7 +190,9 @@ async def run(timeframes: list[str], symbols: list[str] | None = None) -> None:
                 await storage.upload(path, to_bytes(bundle))
                 asset_ids = list(assets.values()) if name == "ALL" else [assets[name]]
                 async with factory() as session, session.begin():
-                    ids = await register(session, asset_ids, timeframe, path, metrics, start, end)
+                    ids = await register(
+                        session, asset_ids, timeframe, path, metrics, start, end, model.features
+                    )
                 print(
                     f"{name:4} {timeframe:3} config={config.name} "
                     f"status={'ok' if metrics['beats_baselines'] else 'degraded'} "
