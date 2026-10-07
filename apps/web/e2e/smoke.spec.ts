@@ -34,3 +34,15 @@ for (const width of WIDTHS) {
     await page.screenshot({ path: `test-results/coin-${width}.png`, fullPage: true });
   });
 }
+
+test("alerts are offered to signed-out visitors without showing anyone's data", async ({ page }) => {
+  await page.goto("/alerts");
+  await expect(page.getByRole("heading", { level: 1, name: "Alerts" })).toBeVisible();
+  await expect(page.getByText(/Sign in to get a notification/)).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+  // The button under the signal leads to sign-in instead of failing silently.
+  await page.goto("/markets/BTC?tf=1h");
+  const card = page.getByRole("article", { name: /signal/ });
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await expect(card.getByRole("link", { name: "Sign in to get alerts" })).toHaveAttribute("href", "/login");
+});

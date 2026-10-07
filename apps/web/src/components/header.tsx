@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { UnreadBadge } from "./alerts-view";
 import { AuthButtons } from "./auth-buttons";
 import { Brand } from "./brand";
 
@@ -10,6 +11,7 @@ const NAV = [
   { href: "/", label: "Markets", match: (path: string) => path === "/" || path.startsWith("/markets") },
   { href: "/track-record", label: "Track record", match: (path: string) => path.startsWith("/track-record") },
   { href: "/watchlist", label: "Watchlist", match: (path: string) => path.startsWith("/watchlist") },
+  { href: "/alerts", label: "Alerts", match: (path: string) => path.startsWith("/alerts") },
   { href: "/about", label: "How it works", match: (path: string) => path.startsWith("/about") },
 ] as const;
 
@@ -32,6 +34,7 @@ export function Header() {
                   }`}
                 >
                   {item.label}
+                  {item.href === "/alerts" && <UnreadBadge />}
                 </Link>
               </li>
             );

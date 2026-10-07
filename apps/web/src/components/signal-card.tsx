@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Bell, Clock } from "lucide-react";
+import { AlertTriangle, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { Prediction, Timeframe } from "@/lib/api/client";
@@ -21,6 +21,7 @@ import {
   shownProbability,
 } from "@/lib/signal";
 
+import { SignalAlertButton } from "./alerts-view";
 import { DIRECTION_TEXT, DirectionIcon } from "./direction";
 
 const ORB: Record<Direction, { c1: string; c2: string; glow: string; ring: string }> = {
@@ -257,16 +258,7 @@ export function SignalCard({
           {DISCLAIMER}
         </p>
 
-        <div>
-          <button
-            type="button"
-            disabled
-            className="btn-primary flex w-full items-center justify-center gap-2 px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Bell aria-hidden size={18} /> Alert me when this signal changes
-          </button>
-          <p className="mt-2 text-center text-xs text-muted">Alerts arrive in the next update.</p>
-        </div>
+        <SignalAlertButton symbol={prediction.symbol} tf={tf} />
       </article>
     </div>
   );
