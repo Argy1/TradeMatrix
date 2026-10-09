@@ -12,6 +12,12 @@
 -- so the worker that is running during the change keeps working. Dropping `features` is a
 -- later migration, after the old rows are converted and checked (python -m app.ml.snapshots).
 
+-- ALTER TABLE needs the table to itself for a moment. If another query is in the way, a
+-- waiting ALTER makes every later query on that table wait behind it, which would freeze the
+-- live site and the worker. So give up after 5 seconds instead: nothing is changed, and the
+-- migration can simply be run again.
+set local lock_timeout = '5s';
+
 alter table public.model_versions
   add column feature_names text[];      -- null for models stored before this migration
 

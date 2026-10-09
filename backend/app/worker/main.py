@@ -9,19 +9,21 @@ import contextlib
 import logging
 import signal
 import sys
+from collections.abc import Sequence
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app import db
-from app.config import get_settings
-from app.data.exchanges import get_exchange_client
-from app.data.news import get_news_sources, news_http
+from app.config import Settings, get_settings
+from app.data.exchanges import ExchangeClient, get_exchange_client
+from app.data.news import NewsSource, get_news_sources, news_http
 from app.ml.predict import ModelCache
 from app.ml.storage import ModelStorage
 from app.observability import init_sentry
 from app.sentiment.gemini import GeminiScorer
+from app.sentiment.score import Scorer
 from app.timeframes import TIMEFRAMES
 from app.worker.jobs import (
     candle_close,
@@ -34,27 +36,16 @@ from app.worker.jobs import (
 )
 
 
-async def main() -> None:
-    # stdout, not stderr: Railway shows stderr lines as errors.
-    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
-    settings = get_settings()
-    init_sentry("worker")
-    client = get_exchange_client(settings)
-    storage = ModelStorage(
-        settings.supabase_url, settings.supabase_service_role_key, settings.supabase_models_bucket
-    )
-    cache = ModelCache(storage)
+def build_scheduler(
+    settings: Settings,
+    client: ExchangeClient,
+    cache: ModelCache,
+    sources: Sequence[NewsSource],
+    scorer: Scorer | None,
+) -> AsyncIOScheduler:
+    """Every job with its schedule, not started yet. Kept apart from `main` so a test can
+    check the wiring (job names, times, arguments) without starting a worker."""
     k = settings.sentiment_blend_k
-    feeds = news_http()
-    # Without a key the worker still runs everything else; headlines just stay unscored.
-    scorer = None
-    if settings.gemini_api_key and settings.gemini_model:
-        scorer = GeminiScorer.from_key(settings.gemini_api_key, settings.gemini_model)
-
-    # Catch up first: load every candle missed while the worker was down, predict the newest
-    # candles (skipped if already done), and resolve finished predictions.
-    await candle_close(client, cache, k, list(TIMEFRAMES))
-
     scheduler = AsyncIOScheduler(timezone="UTC")
     # 5 seconds after every full hour, when 1h (and sometimes 4h/1d) candles have just closed.
     scheduler.add_job(
@@ -71,7 +62,7 @@ async def main() -> None:
     scheduler.add_job(
         run_job,
         CronTrigger(minute="2-59/15", timezone="UTC"),
-        args=["ingest_news", news_job(get_news_sources(feeds))],
+        args=["ingest_news", news_job(sources)],
         id="ingest_news",
         max_instances=1,
         coalesce=True,
@@ -117,6 +108,30 @@ async def main() -> None:
         max_instances=1,
         coalesce=True,
     )
+    return scheduler
+
+
+async def main() -> None:
+    # stdout, not stderr: Railway shows stderr lines as errors.
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+    settings = get_settings()
+    init_sentry("worker")
+    client = get_exchange_client(settings)
+    storage = ModelStorage(
+        settings.supabase_url, settings.supabase_service_role_key, settings.supabase_models_bucket
+    )
+    cache = ModelCache(storage)
+    feeds = news_http()
+    # Without a key the worker still runs everything else; headlines just stay unscored.
+    scorer = None
+    if settings.gemini_api_key and settings.gemini_model:
+        scorer = GeminiScorer.from_key(settings.gemini_api_key, settings.gemini_model)
+
+    # Catch up first: load every candle missed while the worker was down, predict the newest
+    # candles (skipped if already done), and resolve finished predictions.
+    await candle_close(client, cache, settings.sentiment_blend_k, list(TIMEFRAMES))
+
+    scheduler = build_scheduler(settings, client, cache, get_news_sources(feeds), scorer)
     scheduler.start()
     log("worker_started", jobs=[job.id for job in scheduler.get_jobs()])
 

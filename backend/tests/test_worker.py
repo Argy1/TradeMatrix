@@ -42,3 +42,39 @@ async def test_advisory_lock_blocks_a_second_worker() -> None:
                 assert await try_lock(worker_b, "test_lock_job")
     finally:
         await engine.dispose()
+
+
+def test_scheduler_has_every_job_at_its_time() -> None:
+    """The wiring of the worker: a wrong name, time or argument here is a production outage,
+    so it is checked without starting anything."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    from app.config import Settings
+    from app.worker.main import build_scheduler
+
+    settings = Settings(_env_file=None)
+    scheduler = build_scheduler(settings, client=None, cache=None, sources=[], scorer=object())
+    jobs = {job.id: job for job in scheduler.get_jobs()}
+    assert set(jobs) == {
+        "candle_close", "ingest_news", "score_sentiment", "check_price_alerts", "heartbeat",
+    }  # fmt: skip
+
+    def fires(job_id: str, count: int) -> list[str]:
+        """The next `count` times a job runs after 12:00:00 UTC, as HH:MM:SS."""
+        trigger, moment, times = jobs[job_id].trigger, datetime(2026, 10, 9, 12, tzinfo=UTC), []
+        assert isinstance(trigger, CronTrigger)
+        for _ in range(count):
+            moment = trigger.get_next_fire_time(moment, moment)
+            times.append(f"{moment:%H:%M:%S}")
+        return times
+
+    assert fires("candle_close", 2) == ["12:00:05", "13:00:05"]  # 5 s after each hourly close
+    assert fires("ingest_news", 5) == ["12:02:00", "12:17:00", "12:32:00", "12:47:00", "13:02:00"]
+    assert fires("score_sentiment", 4) == ["12:04:00", "12:19:00", "12:34:00", "12:49:00"]
+    assert fires("check_price_alerts", 2) == ["12:00:30", "12:01:30"]  # every minute
+    assert jobs["check_price_alerts"].kwargs == {"quiet_when_idle": True}
+    assert jobs["score_sentiment"].args[0] == "score_sentiment"
+
+    # No Gemini key: everything else still runs, only the scoring job is left out.
+    without = build_scheduler(settings, client=None, cache=None, sources=[], scorer=None)
+    assert {job.id for job in without.get_jobs()} == set(jobs) - {"score_sentiment"}
