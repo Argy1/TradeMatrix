@@ -29,6 +29,7 @@ from app.ml.train import fit_calibrated
 from app.sentiment.aggregate import sentiment_by_asset
 from app.sentiment.schemas import HeadlineSentiment
 from app.sentiment.score import score_sentiment, scored_today
+from app.timeframes import last_closed_open_time
 
 pytestmark = pytest.mark.db
 T0 = datetime(2001, 1, 1, tzinfo=UTC)
@@ -381,40 +382,62 @@ def small_bundle() -> ModelBundle:
     return ModelBundle(model, "BTC", "1h", "test", data.index[0], data.index[899])
 
 
-async def test_prediction_job_sql_accepts_sentiment_and_both_snapshot_forms(
+async def test_prediction_job_stores_sentiment_and_both_snapshot_forms(
     session: AsyncSession,
 ) -> None:
-    """The real `run_predictions` against the real tables, rolled back. The live worker has
-    normally written this hour's signals already, so nothing new is stored; what the test
-    proves is that every statement of the job is accepted by the database."""
+    """The real `run_predictions` against the real tables, rolled back.
+
+    The live worker has already written this hour's signals, so inside this transaction the
+    rows of two coins are removed first (the rollback puts them back). The job then has to
+    store them again: BTC in the compact form, ETH as JSON."""
     await require_snapshot_migration(session)
     bundle = small_bundle()
-    # BTC gets stored names (compact form); the other coins have none here (JSON form).
+    names = list(bundle.model.features)
+    # BTC's model gets stored names (compact form); every other coin has none here (JSON form).
     await session.execute(
         text(
-            "update model_versions set feature_names = cast(:names as text[]) "
-            "where is_active and timeframe = '1h' "
-            "and asset_id = (select id from assets where symbol = 'BTC')"
+            "update model_versions set feature_names = case when asset_id = "
+            "(select id from assets where symbol = 'BTC') then cast(:names as text[]) end "
+            "where is_active and timeframe = '1h'"
         ),
-        {"names": list(bundle.model.features)},
+        {"names": names},
     )
-    await session.execute(
+    now = datetime.now(UTC)
+    target = last_closed_open_time(now, "1h") + timedelta(hours=1)
+    removed = await session.execute(
         text(
-            "update model_versions set feature_names = null "
-            "where is_active and timeframe = '1h' "
-            "and asset_id <> (select id from assets where symbol = 'BTC')"
-        )
+            "delete from predictions where timeframe = '1h' and target_open_time = :target "
+            "and asset_id in (select id from assets where symbol in ('BTC', 'ETH'))"
+        ),
+        {"target": target},
     )
-    active = (
-        await session.execute(
-            text(
-                "select count(*) from model_versions m join assets a on a.id = m.asset_id "
-                "where m.is_active and a.active and m.timeframe = '1h'"
-            )
-        )
-    ).scalar_one()
 
-    result = await run_predictions(session, OneModelCache(bundle), ["1h"], datetime.now(UTC))
+    result = await run_predictions(session, OneModelCache(bundle), ["1h"], now)
 
-    assert result["errors"] == []
-    assert result["created"] + result["skipped"] == active
+    assert result["errors"] == []  # every statement of the job was accepted by the database
+    if removed.rowcount < 2:
+        pytest.skip("the live worker has not stored this hour's signals yet: run it again")
+    assert result["created"] == 2
+    rows = await session.execute(
+        text(
+            "select a.symbol, p.features, p.feature_values, p.sentiment_agg, p.sentiment_k, "
+            "v.features as through_view "
+            "from predictions p join assets a on a.id = p.asset_id "
+            "join prediction_features v on v.prediction_id = p.id "
+            "where p.timeframe = '1h' and p.target_open_time = :target "
+            "and a.symbol in ('BTC', 'ETH') order by a.symbol"
+        ),
+        {"target": target},
+    )
+    btc, eth = rows.all()
+    # BTC: values only, in the model's order; the view puts the names back.
+    assert btc.features is None and len(btc.feature_values) == len(names)
+    assert set(as_dict(btc.through_view)) == set(names)  # (jsonb keeps its own key order)
+    # The view prints 15 digits, the array holds the 4-byte number: the same value at the
+    # precision that is stored (and that the model reads).
+    shown, stored = as_dict(btc.through_view)["rsi14"], btc.feature_values[names.index("rsi14")]
+    assert np.float32(shown) == np.float32(stored)
+    # ETH: no stored names for its model, so the job kept the self-describing JSON.
+    assert eth.feature_values is None and set(as_dict(eth.features)) == set(names)
+    for row in (btc, eth):
+        assert -1 <= row.sentiment_agg <= 1 and row.sentiment_k == 0  # stored, not blended
