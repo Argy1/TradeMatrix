@@ -1,0 +1,6 @@
+{
+  "API_BASE_URL": "https://api-production-a829.up.railway.app",
+  "WS_URL": "wss://api-production-a829.up.railway.app",
+  "SUPABASE_URL": "https://PROJECT_REF.supabase.co",
+  "SUPABASE_ANON_KEY": "the public anon / publishable key"
+}

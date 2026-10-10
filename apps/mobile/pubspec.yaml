@@ -1,0 +1,45 @@
+name: tradematrix
+description: "TradeMatrix AI: crypto market signals with probabilities. Created by Argy."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # State: providers that the screens watch (docs/02).
+  flutter_riverpod: ^2.6.1
+  # Navigation with URLs and a bottom-tab shell.
+  go_router: ^17.5.0
+  # HTTP client for the REST API.
+  dio: ^5.11.1
+  # Login (email + password). Only the public URL and anon key are in the app.
+  supabase_flutter: ^2.18.2
+  # Live candles and signals from /ws/stream.
+  web_socket_channel: ^3.0.3
+  # Opens a news article in the phone's browser.
+  url_launcher: ^6.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  # The three typefaces from docs/08, bundled so the app never waits for a download.
+  # They are variable fonts (one file holds every weight) under the SIL Open Font License;
+  # the license texts sit next to them in assets/fonts/.
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora.ttf
+    - family: DMSans
+      fonts:
+        - asset: assets/fonts/DMSans.ttf
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono.ttf
