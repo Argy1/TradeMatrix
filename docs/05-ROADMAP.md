@@ -152,14 +152,26 @@ Sentiment decision log: _(fill in)_
 
 Goal: the mobile app against the same API.
 
-- [ ] Scaffold `apps/mobile` (Flutter, Riverpod, go_router, dio, supabase_flutter), flavors/dart-define for URLs, splash screen showing **TradeMatrix AI — Created by Argy**.
-- [ ] Build the Flutter theme and components from `docs/08-DESIGN.md` (glass, 3D buttons, orb with ring, signal card, tab bar) to match the mobile screens in the design canvas.
-- [ ] API client (generated from OpenAPI or hand-written DTOs) and auth (email + Google).
-- [ ] Screens: Markets, Coin detail (chart with candles/volume + indicator overlays, timeframe switch, signal card, news), Track record, Watchlist, Alerts, Notifications, About/Settings.
-- [ ] WebSocket live updates with reconnect and lifecycle handling (pause in background).
+Started on 2026-10-10 by Argy's decision while Gate 4 is still open (Gate 4 waits for Argy's signed-in alert check and for four weeks of sentiment data, see Phase 4).
+
+- [x] Scaffold `apps/mobile` (Flutter, Riverpod, go_router, dio, supabase_flutter), flavors/dart-define for URLs, splash screen showing **TradeMatrix AI — Created by Argy**.
+  - Flutter 3.41.1. Build values come from `dart_defines.json` through `--dart-define-from-file` (git-ignored, public values only; `dart_defines.example.json` is the template). Without the Supabase values the app still shows every public signal; only sign-in, watchlist and alerts are off. App id `com.argy.tradematrix`.
+- [x] Build the Flutter theme and components from `docs/08-DESIGN.md` (glass, 3D buttons, orb with ring, signal card, tab bar) to match the mobile screens in the design canvas.
+  - Everything is painted by Flutter itself, no images and no 3D engine: the orb with its probability ring, keycap buttons that press down, glass cards, the probability meter, the 3D logo, an isometric candle scene and a perspective floor grid. Sora, DM Sans and JetBrains Mono are bundled (Open Font License). Motion stops when the phone asks for reduced motion.
+- [x] API client (hand-written DTOs) and email auth.
+  - `lib/data/` (dio client, immutable models, Riverpod providers). Email and password sign-in and sign-up through Supabase. The app is a thin client: it never computes an indicator or a probability.
+- [ ] Google sign-in. Needs a Google OAuth client from Argy (the website needs the same one).
+- [x] Screens: Markets, Coin detail (chart with candles/volume + indicator overlays, timeframe switch, signal card, news), Track record, Watchlist, Alerts, Notifications, About/Settings.
+  - Tabs: Markets, Signals, Watchlist, Alerts (rules and the notification list), More (Track record, About, sign in and out). The details screen has the hand-painted chart (candles, volume, EMA lines, the dashed NEXT column, drag to pan, zoom, long-press for the candle's prices), "Why", reliability next to the baseline, recent signals, news tone and the disclaimer.
+  - Checked on 2026-10-10 as a browser build at 390 x 844 against the live API, signed out. The signed-in screens (watchlist, alerts, notifications) are covered by widget tests on fake data only; Argy's signed-in check on a phone is still open.
+- [x] WebSocket live updates with reconnect and lifecycle handling (pause in background).
+  - `lib/data/live.dart`: reconnects with a growing wait, answers pings, closes when the app goes to the background and reconnects when it comes back.
 - [ ] Firebase project, FCM setup (Android first), device-token registration (`/v1/devices`), worker sends pushes for alerts.
-- [ ] Widget tests for the signal card and one golden or smoke test; `flutter analyze` clean.
+  - Needs Argy: a Firebase project (CLAUDE.md, "Ask Argy first"). After that: the `/v1/devices` endpoints (the `device_tokens` table already exists), the push sender in the worker, and `firebase_messaging` in the app. Alerts and the notification list already work inside the app without push.
+- [x] Widget tests for the signal card and one golden or smoke test; `flutter analyze` clean.
+  - 27 tests: wording and formatting, the signal card, the whole app on fake data, and six screens at 360 px wide with the phone's text size at 200% (no overflow). `flutter analyze` reports no issues. CI: `.github/workflows/mobile.yml`.
 - [ ] Build a release APK / internal testing track; iOS later if Argy has the Apple developer account.
+  - Both builds work on 2026-10-10: `flutter build apk --debug` and `flutter build apk --release --dart-define-from-file=dart_defines.json` (51 MB, `build/app/outputs/flutter-apk/app-release.apk`). The release build is signed with Flutter's debug key, which is enough to install it on Argy's own phone but not for a store. Still open: a test on a real phone, and a real signing key plus the internal testing track when the app is shared.
 
 **Gate 5:** private beta build runs on a real Android phone: login, live chart, signal, alert push received.
 
