@@ -77,6 +77,9 @@ The file is `build/app/outputs/flutter-apk/app-release.apk` (about 51 MB). Copy 
 phone and open it; Android asks once to allow installing from that source. This build is
 signed with Flutter's debug key: fine for your own phone, not for a store.
 
+Add `--split-per-abi` for smaller files, one per processor type (about 18 MB each). Almost
+every phone from the last years takes `app-arm64-v8a-release.apk`.
+
 ## App icon
 
 The icon is the logo tile from `lib/widgets/brand.dart`, drawn again by a small Python script
