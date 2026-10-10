@@ -64,7 +64,31 @@ lib/
                            alerts, more, track_record, about, auth, splash, shell (tab bar)
 test/                      formatting and wording, the signal card, the app on fake data
 assets/fonts/              Sora, DM Sans, JetBrains Mono (SIL Open Font License, texts included)
+tool/make_icons.py         draws the app icon in every size (see "App icon" below)
 ```
+
+## Install it on an Android phone
+
+```bash
+flutter build apk --release --dart-define-from-file=dart_defines.json
+```
+
+The file is `build/app/outputs/flutter-apk/app-release.apk` (about 51 MB). Copy it to the
+phone and open it; Android asks once to allow installing from that source. This build is
+signed with Flutter's debug key: fine for your own phone, not for a store.
+
+## App icon
+
+The icon is the logo tile from `lib/widgets/brand.dart`, drawn again by a small Python script
+so that the icon and the in-app logo stay the same:
+
+```bash
+uv run --with pillow python tool/make_icons.py
+```
+
+It writes the Android icons (old style and "adaptive"), the iOS icons and the web preview
+icons. The window is dark from the first moment the app starts (`res/values/colors.xml`), so
+there is no white flash before the splash screen.
 
 ## The 3D look
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's background (Tm.bg in lib/theme/tokens.dart). Used behind the icon and while
+         the app starts, so there is no white flash before the first Flutter frame. -->
+    <color name="tm_background">#060913</color>
+</resources>
