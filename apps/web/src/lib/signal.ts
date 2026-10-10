@@ -57,8 +57,11 @@ export function reliabilitySentence(
   n: number,
   lowSample: boolean,
 ): string {
-  if (model == null || naive == null || n === 0)
+  if (n === 0 || naive == null)
     return "Not enough finished signals yet to measure reliability. Check back after more candles close.";
+  if (model == null)
+    // Signals finished, but none of them was an Up or Down call.
+    return `All ${n} recent signals were Neutral (too close to call), so there are no Up or Down calls to score yet. Staying Neutral is the honest answer when the odds are close.`;
   const points = (model - naive) * 100;
   const sample = lowSample ? ` Only ${n} finished signals so far, so this can still change a lot.` : "";
   if (points > 0)

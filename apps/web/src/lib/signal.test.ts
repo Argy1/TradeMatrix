@@ -32,6 +32,8 @@ describe("signal wording (docs/08)", () => {
     expect(reliabilitySentence(0.48, 0.5, 300, false)).toContain("did not beat");
     expect(reliabilitySentence(null, null, 0, true)).toContain("Not enough finished signals");
     expect(reliabilitySentence(0.6, 0.5, 12, true)).toContain("Only 12 finished signals");
+    // Signals finished, but every one was Neutral: say that, not "not enough signals".
+    expect(reliabilitySentence(null, 0.514, 181, false)).toContain("All 181 recent signals were Neutral");
   });
 
   it("gives screen readers one sentence", () => {
