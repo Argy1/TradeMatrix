@@ -9,6 +9,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/glass.dart';
 import '../../widgets/keycap.dart';
 import '../../widgets/page.dart';
+import '../../widgets/size_keys.dart';
 import '../../widgets/states.dart';
 
 final _daysProvider = StateProvider.autoDispose<int>((ref) => 30);
@@ -21,12 +22,14 @@ class TrackRecordScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final days = ref.watch(_daysProvider);
-    final summary = ref.watch(performanceProvider(days));
+    final tf = ref.watch(selectedTimeframeProvider);
+    final key = (days: days, tf: tf);
+    final summary = ref.watch(performanceProvider(key));
     String pct(double? v) => v == null ? 'n/a' : formatProbability(v);
 
     return TmPage(
       header: const BackBar(title: 'Track record', subtitle: 'We show our results, even when they are poor'),
-      onRefresh: () async => ref.invalidate(performanceProvider(days)),
+      onRefresh: () async => ref.invalidate(performanceProvider(key)),
       children: [
         Row(
           children: [
@@ -43,20 +46,19 @@ class TrackRecordScreen extends ConsumerWidget {
             ],
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        const SizeKeys(padding: EdgeInsets.zero),
+        const SizedBox(height: 10),
         summary.when(
           skipLoadingOnRefresh: true,
           loading: () => const Column(children: [Skeleton(height: 110), SizedBox(height: 12), Skeleton(height: 300)]),
           error: (error, _) => ErrorState(
             message: ErrorState.describe(error, 'Could not load the track record.'),
-            onRetry: () => ref.invalidate(performanceProvider(days)),
+            onRetry: () => ref.invalidate(performanceProvider(key)),
           ),
           data: (data) {
             final o = data.overall;
-            final rows = [...data.rows]..sort((a, b) {
-                final tf = timeframes.indexOf(a.timeframe ?? '').compareTo(timeframes.indexOf(b.timeframe ?? ''));
-                return tf != 0 ? tf : 0;
-              });
+            final rows = data.rows; // one candle size, in the API's coin order
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -66,16 +68,16 @@ class TrackRecordScreen extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          Expanded(child: _Stat('Signals recorded', '${o.nPredictions}')),
+                          Expanded(child: _Stat('$tf signals recorded', '${o.nPredictions}')),
                           const SizedBox(width: 8),
                           Expanded(child: _Stat('Model accuracy', pct(o.accuracy))),
                           const SizedBox(width: 8),
-                          Expanded(child: _Stat('Simple baseline', pct(o.naive))),
+                          Expanded(child: _Stat('Best simple rule', pct(o.bestSimple))),
                         ],
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        reliabilitySentence(o.accuracy, o.naive, o.nResolved, o.lowSample),
+                        reliabilitySentence(o.accuracy, o.bestSimple, o.nResolved, o.lowSample),
                         style: TmText.body(14, color: Tm.fg2, height: 1.5),
                       ),
                     ],
@@ -87,10 +89,11 @@ class TrackRecordScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SectionHeader(
-                        'Per coin and candle size',
-                        subtitle: 'Accuracy counts only Up and Down calls. '
-                            'Baseline = "repeat the last move" on the same candles.',
+                      SectionHeader(
+                        'Per coin, $tf candles',
+                        subtitle: 'Accuracy counts only Up and Down calls. Baseline = the best of three '
+                            'simple rules: repeat the last move, always Up, always Down.'
+                            '${isFast(tf) ? ' A candle that closes at the same price is flat: no result.' : ''}',
                       ),
                       const SizedBox(height: 10),
                       for (final row in rows) _Row(row: row),
@@ -135,7 +138,7 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final a = row.accuracy, b = row.naive;
+    final a = row.accuracy, b = row.bestSimple;
     final verdict = (a == null || b == null)
         ? 'only Neutral so far'
         : a > b

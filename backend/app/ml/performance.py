@@ -66,15 +66,22 @@ def _share(part: int, whole: int) -> float | None:
 
 def from_totals(t: Totals) -> dict:
     up_rate = _share(t.n_went_up, t.n_resolved)
+    naive = _share(t.n_naive_correct, t.n_naive)
+    # Four one-line rules. "reverse" says the opposite of the last candle: on short candles
+    # the price often bounces between two neighbouring price steps, so it can beat a coin flip.
+    rules = {
+        "naive": naive,
+        "reverse": None if naive is None else 1 - naive,
+        "always_up": up_rate,
+        "always_down": None if up_rate is None else 1 - up_rate,
+    }
+    known = [value for value in rules.values() if value is not None]
     return {
         "n_resolved": t.n_resolved,
         "coverage": _share(t.n_calls, t.n_resolved),  # share of Up/Down calls
         "accuracy": _share(t.n_correct, t.n_calls),  # only Up/Down calls count
-        "baseline": {
-            "naive": _share(t.n_naive_correct, t.n_naive),
-            "always_up": up_rate,
-            "always_down": None if up_rate is None else 1 - up_rate,
-        },
+        # "best" is the number the model has to beat: the best of the four rules.
+        "baseline": rules | {"best": max(known) if known else None},
         "brier": t.brier_sum / t.n_resolved if t.n_resolved else None,
         # Always answering the share of up candles: mean of (rate - y)^2 = rate * (1 - rate).
         "brier_baseline": None if up_rate is None else up_rate * (1 - up_rate),

@@ -11,6 +11,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/direction.dart';
 import '../../widgets/keycap.dart';
 import '../../widgets/page.dart';
+import '../../widgets/size_keys.dart';
 import '../../widgets/states.dart';
 import 'signal_card.dart';
 
@@ -43,7 +44,7 @@ class SignalsScreen extends ConsumerWidget {
       },
       children: [
         _CoinChips(markets: markets.valueOrNull ?? const [], symbol: symbol, tf: tf),
-        _TimeframeRow(tf: tf),
+        const SizeKeys(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
@@ -103,6 +104,10 @@ class SignalsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 14),
                     ValidityLine(prediction: p),
+                    if (isFast(tf)) ...[
+                      const SizedBox(height: 10),
+                      Text(fastNote, style: TmText.body(12.5, color: Tm.fg3, height: 1.45)),
+                    ],
                   ],
                 ),
               ),
@@ -171,39 +176,6 @@ class _CoinChips extends ConsumerWidget {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _TimeframeRow extends ConsumerWidget {
-  const _TimeframeRow({required this.tf});
-  final String tf;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: Row(
-        children: [
-          Flexible(
-            child: Text('Candle size',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TmText.body(13, weight: FontWeight.w600, color: Tm.muted)),
-          ),
-          for (final option in timeframes) ...[
-            const SizedBox(width: 10),
-            Expanded(
-              child: KeyButton(
-                onTap: () => ref.read(selectedTimeframeProvider.notifier).state = option,
-                selected: option == tf,
-                semanticLabel: 'Candle size $option',
-                child: Text(option, style: TmText.mono(14, weight: FontWeight.w600)),
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }

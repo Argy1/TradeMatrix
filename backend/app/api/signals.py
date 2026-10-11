@@ -135,6 +135,7 @@ async def latest_prediction(session: Db, symbol: str, tf: Timeframe) -> Predicti
         recent_accuracy=RecentAccuracy(
             model=recent["accuracy"],
             naive_baseline=recent["baseline"]["naive"],
+            best_baseline=recent["baseline"]["best"],
             n=recent["n_resolved"],
             low_sample=recent["low_sample"],
         ),

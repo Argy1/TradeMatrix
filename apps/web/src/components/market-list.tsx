@@ -123,8 +123,8 @@ export function TrackStrip() {
       tone: "text-[#7BE8FF]",
     },
     {
-      label: "Simple baseline",
-      value: data?.baseline.naive != null ? formatProbability(data.baseline.naive) : "not enough data",
+      label: "Best simple rule",
+      value: data?.baseline.best != null ? formatProbability(data.baseline.best) : "not enough data",
       tone: "text-[#B4C0DC]",
     },
   ];

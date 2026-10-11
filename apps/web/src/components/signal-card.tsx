@@ -116,7 +116,9 @@ function Meter({ pUp }: { pUp: number }) {
 }
 
 function Reliability({ prediction, symbol }: { prediction: Prediction; symbol: string }) {
-  const { model, naive_baseline: naive, n, low_sample: lowSample } = prediction.recent_accuracy;
+  // The API sends the best of the simple rules on the same signals (repeat the last candle,
+  // reverse it, always Up, always Down): the number the model has to beat.
+  const { model, best_baseline: naive, n, low_sample: lowSample } = prediction.recent_accuracy;
   const scale = (value: number) => `${Math.min(Math.max((value - 0.4) / 0.2, 0), 1) * 100}%`;
   return (
     <section aria-labelledby="reliability" className="space-y-3">
@@ -132,7 +134,7 @@ function Reliability({ prediction, symbol }: { prediction: Prediction; symbol: s
         <div className="space-y-2 text-sm">
           {[
             { label: "TradeMatrix model", value: model, color: "#4DD8FF" },
-            { label: "Simple baseline: repeat the last move", value: naive, color: "#9AA8C7" },
+            { label: "Best simple rule", value: naive, color: "#9AA8C7" },
           ].map((bar) => (
             <div key={bar.label}>
               <div className="flex justify-between text-fg-2">

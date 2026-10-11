@@ -57,6 +57,7 @@ def test_baselines() -> None:
     result = metrics.baselines(prev_up, y, base_rate=0.5)
     assert result == {
         "naive": 0.5,
+        "reverse": 0.5,
         "always_up": 0.5,
         "always_down": 0.5,
         "brier_base_rate": 0.25,

@@ -11,7 +11,16 @@ import 'models.dart';
 /// value, so it works as a key for the per-coin providers below.
 typedef CoinKey = ({String symbol, String tf});
 
-const timeframes = ['1h', '4h', '1d'];
+/// Same sizes and order as the API. The fast sizes get a new signal every 1 to 30 minutes;
+/// Binance has no 10m candle, so 15m takes its place.
+const fastTimeframes = ['1m', '3m', '5m', '15m', '30m'];
+const slowTimeframes = ['1h', '4h', '1d'];
+const timeframes = [...fastTimeframes, ...slowTimeframes];
+
+bool isFast(String tf) => fastTimeframes.contains(tf);
+
+/// One period of one candle size, for the track record.
+typedef PerformanceKey = ({int days, String tf});
 
 // ---- session ----
 
@@ -38,8 +47,9 @@ final apiProvider = Provider<TmApi>((ref) {
   );
 });
 
-/// Re-run a provider on a timer while a screen is watching it. The worker makes a new
-/// signal once per candle, so polling every 30-60 s is plenty next to the live stream.
+/// Re-run a provider on a timer while a screen is watching it. New signals arrive over the
+/// live stream; polling is the safety net if a message is missed, so the fast candle sizes
+/// poll more often than the slow ones.
 void _refreshEvery(Ref ref, Duration every) {
   final timer = Timer.periodic(every, (_) => ref.invalidateSelf());
   ref.onDispose(timer.cancel);
@@ -62,7 +72,7 @@ final marketsProvider = FutureProvider.autoDispose<List<MarketRow>>((ref) {
 class PredictionNotifier extends AutoDisposeFamilyAsyncNotifier<Prediction, CoinKey> {
   @override
   Future<Prediction> build(CoinKey arg) {
-    _refreshEvery(ref, const Duration(seconds: 30));
+    _refreshEvery(ref, Duration(seconds: isFast(arg.tf) ? 10 : 30));
     return ref.watch(apiProvider).latestPrediction(arg.symbol, arg.tf);
   }
 
@@ -106,7 +116,7 @@ final candlesProvider =
     AsyncNotifierProvider.autoDispose.family<CandlesNotifier, CandlesData, CoinKey>(CandlesNotifier.new);
 
 final historyProvider = FutureProvider.autoDispose.family<List<HistoryItem>, CoinKey>((ref, key) {
-  _refreshEvery(ref, const Duration(seconds: 60));
+  _refreshEvery(ref, Duration(seconds: isFast(key.tf) ? 20 : 60));
   return ref.watch(apiProvider).history(key.symbol, key.tf);
 });
 
@@ -115,10 +125,13 @@ final newsProvider = FutureProvider.autoDispose.family<List<NewsItem>, String>((
   return ref.watch(apiProvider).news(symbol);
 });
 
-/// Every coin x candle size in one request (the track-record screen).
-final performanceProvider = FutureProvider.autoDispose.family<PerformanceSummary, int>((ref, days) {
+/// Every coin of one candle size in one request (the track record). One size at a time: the
+/// fast sizes make far more signals than the slow ones, so a number across all sizes would
+/// mostly be a one-minute number.
+final performanceProvider =
+    FutureProvider.autoDispose.family<PerformanceSummary, PerformanceKey>((ref, key) {
   _refreshEvery(ref, const Duration(minutes: 5));
-  return ref.watch(apiProvider).performanceSummary(days);
+  return ref.watch(apiProvider).performanceSummary(key.days, key.tf);
 });
 
 // ---- signed-in data ----

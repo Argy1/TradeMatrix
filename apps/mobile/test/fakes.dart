@@ -22,7 +22,9 @@ Json predictionJson({String label = 'up', double pUp = 0.582, String status = 'o
       'sentiment_agg': 0.12,
       'sentiment_used': false,
       'model': {'id': 12, 'trained_at': '2026-09-28T02:10:00Z', 'status': status},
-      'recent_accuracy': {'model': 0.541, 'naive_baseline': 0.512, 'n': 200, 'low_sample': false},
+      'recent_accuracy': {
+        'model': 0.541, 'naive_baseline': 0.512, 'best_baseline': 0.512, 'n': 200, 'low_sample': false,
+      }, // dart format off
       'disclaimer': 'Signals are probabilistic estimates for information and education only, not financial advice.',
       'stale': stale,
     };
@@ -97,7 +99,7 @@ class FakeApi extends TmApi {
       ];
 
   @override
-  Future<PerformanceSummary> performanceSummary(int days) async {
+  Future<PerformanceSummary> performanceSummary(int days, String tf) async {
     Json row(String? symbol, String? tf) => {
           'symbol': symbol,
           'timeframe': tf,
@@ -106,7 +108,8 @@ class FakeApi extends TmApi {
           'n_resolved': 3600,
           'coverage': 0.2,
           'accuracy': 0.499,
-          'baseline': {'naive': 0.505, 'always_up': 0.5},
+          'baseline': {'naive': 0.505, 'reverse': 0.495, 'always_up': 0.5, 'always_down': 0.5, 'best': 0.505},
+          'n_flat': 0,
           'brier': 0.25,
           'brier_baseline': 0.25,
           'by_label': <String, dynamic>{},

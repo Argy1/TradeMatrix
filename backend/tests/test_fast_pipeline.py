@@ -203,6 +203,10 @@ def test_counts_give_the_same_numbers_as_single_signals() -> None:
     assert from_totals(counts) == performance(ROWS)
     stats = from_totals(counts)
     assert stats["baseline"]["always_up"] == 0.5 and stats["baseline"]["always_down"] == 0.5
+    # The naive rule was right on 2 of the 3 rows it could answer, so reversing it gets 1 of 3.
+    assert stats["baseline"]["naive"] == pytest.approx(2 / 3)
+    assert stats["baseline"]["reverse"] == pytest.approx(1 / 3)
+    assert stats["baseline"]["best"] == pytest.approx(2 / 3)
     assert stats["brier_baseline"] == 0.25
 
 
@@ -216,7 +220,8 @@ def test_days_add_up() -> None:
 def test_no_signals_yet_is_explicit() -> None:
     stats = from_totals(Totals())
     assert stats["accuracy"] is None and stats["coverage"] is None and stats["brier"] is None
-    assert stats["baseline"] == {"naive": None, "always_up": None, "always_down": None}
+    assert set(stats["baseline"]) == {"naive", "reverse", "always_up", "always_down", "best"}
+    assert all(value is None for value in stats["baseline"].values())
     assert stats["low_sample"] is True
 
 

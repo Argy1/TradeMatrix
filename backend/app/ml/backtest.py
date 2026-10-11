@@ -135,6 +135,7 @@ def fold_metrics(frame: pd.DataFrame) -> dict:
         "coverage": float((metrics.signals(frame["p_up"].to_numpy()) != 0).mean()),
         "accuracy": result["accuracy"],
         "naive": float((prev_up == y).mean()) if len(y) else None,
+        "reverse": float((prev_up != y).mean()) if len(y) else None,
         "always_up": up_share,
         "always_down": None if up_share is None else 1 - up_share,
         "flat_share": float((frame["next_return"].to_numpy() == 0).mean()),
@@ -231,7 +232,7 @@ def summarize(preds: pd.DataFrame, fold_rows: list[dict], timeframe: str) -> dic
     with_calls = folds.dropna(subset=["accuracy"])
     acc_edge = metrics.bootstrap_ci((with_calls["accuracy"] - with_calls["naive"]).to_numpy())
     # The model has to beat the BEST simple rule of each fold, not only the naive one.
-    best_simple = with_calls[["naive", "always_up", "always_down"]].max(axis=1)
+    best_simple = with_calls[["naive", "reverse", "always_up", "always_down"]].max(axis=1)
     best_edge = metrics.bootstrap_ci((with_calls["accuracy"] - best_simple).to_numpy())
     with_result = folds.dropna(subset=["brier"])
     brier_edge = metrics.bootstrap_ci(
@@ -290,8 +291,9 @@ def _pct(value: float | None, digits: int = 1) -> str:
 
 
 def best_simple_rule(numbers: dict) -> float:
-    """Accuracy of the best of: repeat the last candle, always Up, always Down."""
-    return max(numbers["naive"], numbers["always_up"], 1 - numbers["always_up"])
+    """Accuracy of the best of: repeat the last candle, reverse it, always Up, always Down."""
+    naive, up = numbers["naive"], numbers["always_up"]
+    return max(naive, 1 - naive, up, 1 - up)
 
 
 def write_report(
@@ -351,7 +353,8 @@ def write_report(
         "| Measure | Model | Baseline |",
         "| --- | --- | --- |",
         f"| Accuracy of Up/Down calls | {_pct(m['accuracy'])} | naive {_pct(b['naive'])}, "
-        f"always-up {_pct(b['always_up'])}, always-down {_pct(b['always_down'])} |",
+        f"reverse {_pct(b['reverse'])}, always-up {_pct(b['always_up'])}, "
+        f"always-down {_pct(b['always_down'])} |",
         f"| Flat candles (close equal to the previous close) | {_pct(m['flat_share'])} | |",
         f"| Coverage (share of non-neutral calls) | {_pct(m['coverage'])} | 100% |",
         f"| Brier score (lower is better) | {m['brier']:.4f} | "
@@ -424,9 +427,15 @@ def write_summary_table(results: list[tuple[str, str, dict, Path]]) -> Path:
         "",
         f'{passed} of {len(results)} coin-size pairs beat the simple rules. "ok" needs two '
         "things, each with a 95% interval above zero: more accurate than the best simple rule "
-        "(repeat the last candle, always Up, always Down), and better probabilities than the "
-        'base rate (Brier). Everything else is "degraded" and is shown in the apps with the '
-        "below-baseline warning.",
+        "(repeat the last candle, reverse the last candle, always Up, always Down), and better "
+        'probabilities than the base rate (Brier). Everything else is "degraded" and is shown '
+        "in the apps with the below-baseline warning.",
+        "",
+        "**Accurate is not the same as useful.** On short candles the price often bounces between "
+        "two neighbouring price steps (the buy price and the sell price). A model can predict that "
+        "bounce and be right far more than half of the time, but the bounce is smaller than the "
+        'fee and the spread. The "After fees" column shows what is left: read it before the '
+        "accuracy.",
         "",
         'Accuracy counts only Up/Down calls. "Calls" is the share of signals that were not '
         'Neutral. A flat candle (same close as the one before) has no result. "After fees" is '

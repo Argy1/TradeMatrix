@@ -99,6 +99,9 @@ class RecentAccuracy(BaseModel):
 
     model: float | None
     naive_baseline: float | None
+    # The best of the simple rules on the same signals (repeat the last candle, reverse it,
+    # always Up, always Down): the number the model has to beat.
+    best_baseline: float | None
     n: int
     low_sample: bool
 
@@ -170,9 +173,11 @@ class LabelStats(BaseModel):
 
 
 class PerformanceBaseline(BaseModel):
-    naive: float | None
+    naive: float | None  # repeat the last candle
+    reverse: float | None  # say the opposite of the last candle
     always_up: float | None
     always_down: float | None
+    best: float | None  # the best of the four: what the model has to beat
 
 
 class PerformanceOut(BaseModel):

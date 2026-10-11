@@ -8,7 +8,7 @@ Out-of-sample period: 2026-04-12 to 2026-09-27, 12 walk-forward folds, 15097 pre
 
 | Measure | Model | Baseline |
 | --- | --- | --- |
-| Accuracy of Up/Down calls | 53.9% | naive 48.7%, always-up 50.3%, always-down 49.7% |
+| Accuracy of Up/Down calls | 53.9% | naive 48.7%, reverse 51.3%, always-up 50.3%, always-down 49.7% |
 | Flat candles (close equal to the previous close) | 6.4% | |
 | Coverage (share of non-neutral calls) | 17.3% | 100% |
 | Brier score (lower is better) | 0.2498 | base rate 0.2501 |
@@ -18,7 +18,7 @@ Out-of-sample period: 2026-04-12 to 2026-09-27, 12 walk-forward folds, 15097 pre
 
 Bootstrap over folds (mean, 95% interval):
 - Accuracy minus naive: 9.74% (4.25% to 18.67%)
-- Accuracy minus the best simple rule: 7.44% (2.12% to 16.09%)
+- Accuracy minus the best simple rule: 6.53% (1.14% to 14.94%)
 - Brier improvement over base rate: 0.00029 (-0.00031 to 0.00082)
 
 ## Simulated long-only strategy (0.1% fee + 0.05% slippage per trade, per coin average)

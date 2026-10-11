@@ -13,10 +13,8 @@ import { ErrorState, Skeleton } from "./states";
 const pct = (value: number | null | undefined) => (value == null ? "n/a" : formatProbability(value));
 
 function Row({ data }: { data: Performance }) {
-  // Green only when the model beats the BEST simple rule, not just one of them.
-  const rules = [data.baseline.naive, data.baseline.always_up, data.baseline.always_down];
-  const best = Math.max(...rules.map((value) => value ?? 0));
-  const beats = data.accuracy != null && rules.some((value) => value != null) && data.accuracy > best;
+  // Green only when the model beats the BEST simple rule (the API works it out).
+  const beats = data.accuracy != null && data.baseline.best != null && data.accuracy > data.baseline.best;
   return (
     <tr className="border-t border-white/5">
       <th scope="row" className="py-3 pr-4 text-left font-semibold">
@@ -26,6 +24,7 @@ function Row({ data }: { data: Performance }) {
       <td className="font-mono">{pct(data.coverage)}</td>
       <td className={`font-mono ${beats ? "text-up" : ""}`}>{pct(data.accuracy)}</td>
       <td className="font-mono">{pct(data.baseline.naive)}</td>
+      <td className="font-mono">{pct(data.baseline.reverse)}</td>
       <td className="font-mono">{pct(data.baseline.always_up)}</td>
       <td className="font-mono">{pct(data.baseline.always_down)}</td>
       <td className="font-mono">{data.n_flat}</td>
@@ -68,7 +67,7 @@ export function TrackRecord() {
             [`${size} signals recorded`, String(overall.n_predictions)],
             ["Finished signals", String(overall.n_resolved)],
             ["Model accuracy (Up/Down calls)", pct(overall.accuracy)],
-            ['Baseline "repeat the last move"', pct(overall.baseline.naive)],
+            ["Best simple rule", pct(overall.baseline.best)],
           ].map(([label, value]) => (
             <div key={label} className="tile p-5">
               <p className="text-sm text-muted">{label}</p>
@@ -84,12 +83,15 @@ export function TrackRecord() {
         </p>
       )}
       <div className="glass overflow-x-auto p-4 sm:p-6">
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <caption className="mb-3 text-left text-muted">
             Live results per coin for the picked candle size, refreshed every hour. Accuracy
             counts only Up/Down calls; coverage is the share of candles where the model made a
             call. On sizes under 1 hour a candle that closes at the same price is flat: it has no
-            result and is not counted as right or wrong.
+            result and is not counted as right or wrong. The model is compared with four simple
+            rules: repeat the last candle (Naive), say the opposite (Reverse), always Up, always
+            Down. On short candles prices often bounce back, so Reverse can be right more than
+            half of the time without knowing anything.
           </caption>
           <thead className="text-left text-xs uppercase tracking-wider text-muted">
             <tr>
@@ -98,6 +100,7 @@ export function TrackRecord() {
               <th scope="col">Coverage</th>
               <th scope="col">Accuracy</th>
               <th scope="col">Naive</th>
+              <th scope="col">Reverse</th>
               <th scope="col">Always up</th>
               <th scope="col">Always down</th>
               <th scope="col">Flat</th>
@@ -108,7 +111,7 @@ export function TrackRecord() {
           <tbody>
             {summary.isPending ? (
               <tr>
-                <td colSpan={10} className="py-2">
+                <td colSpan={11} className="py-2">
                   <Skeleton className="h-40" />
                 </td>
               </tr>

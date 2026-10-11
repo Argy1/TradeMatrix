@@ -69,13 +69,16 @@ class Reason {
 
 class RecentAccuracy {
   const RecentAccuracy({this.model, this.naiveBaseline, required this.n, required this.lowSample});
+
+  /// [naiveBaseline] is the best of the simple rules on the same signals (repeat the last
+  /// candle, reverse it, always Up, always Down): the number the model has to beat.
   final double? model, naiveBaseline;
   final int n;
   final bool lowSample;
 
   factory RecentAccuracy.fromJson(Json j) => RecentAccuracy(
         model: _double(j['model']),
-        naiveBaseline: _double(j['naive_baseline']),
+        naiveBaseline: _double(j['best_baseline'] ?? j['naive_baseline']),
         n: j['n'] as int,
         lowSample: j['low_sample'] as bool,
       );
@@ -138,7 +141,10 @@ class HistoryItem {
   final String label;
   final DateTime targetOpenTime;
   final String? actualDirection;
-  final bool? correct; // null when the call was Neutral (a "Skip")
+  final bool? correct; // null when the call was Neutral (a "Skip") or the candle closed flat
+
+  /// Sizes under 1 hour: the candle closed at the same price, so there is no result.
+  bool get flat => actualDirection == 'flat';
   final bool resolved;
 
   factory HistoryItem.fromJson(Json j) {
@@ -201,13 +207,21 @@ class Performance {
     required this.nResolved,
     this.accuracy,
     this.naive,
+    this.bestSimple,
     this.coverage,
+    this.nFlat = 0,
     required this.lowSample,
   });
 
   final String? symbol, timeframe;
   final int nPredictions, nResolved;
+  /// Fast sizes: signals whose candle closed at the same price (no result).
+  final int nFlat;
   final double? accuracy, naive, coverage;
+
+  /// The best of the simple rules (repeat the last candle, reverse it, always Up, always
+  /// Down), worked out by the API: the number the model has to beat.
+  final double? bestSimple;
   final bool lowSample;
 
   factory Performance.fromJson(Json j) => Performance(
@@ -217,6 +231,8 @@ class Performance {
         nResolved: j['n_resolved'] as int,
         accuracy: _double(j['accuracy']),
         naive: _double((j['baseline'] as Json)['naive']),
+        bestSimple: _double((j['baseline'] as Json)['best']),
+        nFlat: (j['n_flat'] as int?) ?? 0,
         coverage: _double(j['coverage']),
         lowSample: j['low_sample'] as bool,
       );

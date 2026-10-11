@@ -9,10 +9,13 @@ const displayZone = 'WIB';
 
 DateTime toWib(DateTime time) => time.toUtc().add(const Duration(hours: 7));
 
-const _timeframeWords = {'1h': '1 hour', '4h': '4 hour', '1d': '1 day'};
+const _unitWords = {'m': 'minute', 'h': 'hour', 'd': 'day'};
 
-/// "1 hour" / "4 hour" / "1 day", as used in "the next 1 hour candle".
-String timeframeWords(String tf) => _timeframeWords[tf] ?? tf;
+/// "15 minute" / "1 hour" / "1 day", as used in "the next 1 hour candle".
+String timeframeWords(String tf) {
+  final unit = tf.isEmpty ? null : _unitWords[tf[tf.length - 1]];
+  return unit == null ? tf : '${tf.substring(0, tf.length - 1)} $unit';
+}
 
 /// Prices arrive as exact strings. Add thousands separators without going through a
 /// floating-point number, drop trailing zeros and keep at least two decimals.
@@ -45,9 +48,16 @@ String formatDateTime(DateTime time) {
   return '${wib.day} ${_months[wib.month - 1]}, ${formatClock(time)}';
 }
 
-/// "in 41 min" / "in 2 h 5 min" / "now"
-String formatCountdown(DateTime target, DateTime now) {
-  final minutes = (target.difference(now).inSeconds / 60).round();
+/// "in 41 min" / "in 2 h 5 min" / "now". With [seconds] (the fast candle sizes) the last
+/// ten minutes are exact: "in 3 min 20 s", and under two minutes "in 42 s".
+String formatCountdown(DateTime target, DateTime now, {bool seconds = false}) {
+  final left = target.difference(now).inSeconds;
+  if (seconds && left > 0 && left < 600) {
+    if (left < 120) return 'in $left s';
+    final rest = left % 60;
+    return rest > 0 ? 'in ${left ~/ 60} min $rest s' : 'in ${left ~/ 60} min';
+  }
+  final minutes = (left / 60).round();
   if (minutes <= 0) return 'now';
   if (minutes < 60) return 'in $minutes min';
   final hours = minutes ~/ 60, rest = minutes % 60;

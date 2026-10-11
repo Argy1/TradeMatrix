@@ -239,10 +239,36 @@ def test_a_coin_flip_does_not_pass() -> None:
     assert summary["beats_baselines"] is False
 
 
-def test_always_down_is_a_baseline() -> None:
+def test_always_down_and_reverse_are_baselines() -> None:
     result = metrics.baselines(np.array([1, 1, 0, 0]), np.array([0, 0, 0, 1]), base_rate=0.25)
     assert result["always_up"] == pytest.approx(0.25)
     assert result["always_down"] == pytest.approx(0.75)
+    assert result["naive"] == pytest.approx(0.25) and result["reverse"] == pytest.approx(0.75)
+
+
+def test_a_model_that_only_knows_the_bounce_does_not_pass() -> None:
+    """The price bounces: after an up candle the next one is down 65% of the time. A model
+    that predicts exactly that is right 65%, far above a coin flip, but the one-line rule
+    "reverse the last candle" is right just as often. No edge, so no pass."""
+    rng = np.random.default_rng(11)
+    folds, per_fold = 12, 500
+    n = folds * per_fold
+    prev_up = rng.random(n) < 0.5
+    bounced = rng.random(n) < 0.65
+    up = np.where(bounced, ~prev_up, prev_up)
+    preds = predictions(
+        np.where(prev_up, 0.35, 0.65),  # always says "the opposite of the last candle"
+        up.astype(float),
+        np.where(up, 0.001, -0.001),
+        prev_up.astype(float),
+        np.repeat(np.arange(1, folds + 1), per_fold),
+    )
+    summary = summarize(preds, fold_rows_of(preds), "1m")
+    assert summary["model"]["accuracy"] == pytest.approx(0.65, abs=0.02)
+    assert summary["baselines"]["reverse"] == pytest.approx(0.65, abs=0.02)
+    assert summary["accuracy_edge_vs_naive"][1] > 0.2  # looks huge against the old baseline
+    assert abs(summary["accuracy_edge_vs_best"][0]) < 0.005  # and is nothing against the rule
+    assert summary["beats_baselines"] is False
 
 
 def test_a_model_must_beat_always_down_too() -> None:

@@ -288,7 +288,7 @@ class _ReliabilityCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _Bar(
-            label: 'Baseline: repeat the last move',
+            label: 'Best simple rule',
             value: recent.naiveBaseline,
             valueColor: Tm.fg3,
             colors: const [Color(0xFF8E9AB8), Color(0xFF5C6784)],
@@ -363,9 +363,10 @@ class _RecentCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final history = ref.watch(historyProvider(coinKey));
     final resolved = (history.valueOrNull ?? const <HistoryItem>[]).where((h) => h.resolved).toList();
+    final flat = resolved.where((h) => h.flat).length;
     final calls = resolved.where((h) => h.correct != null).toList();
     final hits = calls.where((h) => h.correct == true).length;
-    final skipped = resolved.length - calls.length;
+    final skipped = resolved.length - calls.length - flat;
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
       child: Column(
@@ -374,7 +375,8 @@ class _RecentCard extends ConsumerWidget {
           SectionHeader(
             'Recent ${coinKey.tf} signals',
             subtitle: 'Newest first. Hit means the candle closed the way we said. '
-                'Skip means the odds were too close, so we made no call.',
+                'Skip means the odds were too close, so we made no call.'
+                '${isFast(coinKey.tf) ? ' Flat means the candle closed at the same price: no result.' : ''}',
           ),
           const SizedBox(height: 14),
           if (history.isLoading && resolved.isEmpty)
@@ -386,7 +388,8 @@ class _RecentCard extends ConsumerWidget {
             Wrap(spacing: 12, runSpacing: 12, children: [for (final item in resolved) _ResultTile(item: item)]),
             const SizedBox(height: 12),
             Text(
-              '$hits of ${calls.length} calls correct${skipped > 0 ? ', $skipped skipped as Neutral' : ''}.',
+              '$hits of ${calls.length} calls correct${skipped > 0 ? ', $skipped skipped as Neutral' : ''}'
+              '${flat > 0 ? ', $flat flat (no result)' : ''}.',
               style: TmText.body(14, weight: FontWeight.w600, color: Tm.fg2),
             ),
           ],
@@ -403,11 +406,13 @@ class _ResultTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final direction = directionOf(item.label);
-    final (mark, color) = switch (item.correct) {
-      null => ('Skip', Tm.neutral),
-      true => ('Hit', Tm.up),
-      false => ('Miss', Tm.downText),
-    };
+    final (mark, color) = item.flat
+        ? ('Flat', Tm.neutral)
+        : switch (item.correct) {
+            null => ('Skip', Tm.neutral),
+            true => ('Hit', Tm.up),
+            false => ('Miss', Tm.downText),
+          };
     return Semantics(
       label: '${formatDateTime(item.targetOpenTime)}: called ${directionWord[direction]}, '
           'went ${item.actualDirection ?? 'unknown'}. $mark.',

@@ -76,8 +76,8 @@ class TmApi {
         (data) => [for (final item in (data as Json)['items'] as List) HistoryItem.fromJson(item as Json)],
       );
 
-  Future<PerformanceSummary> performanceSummary(int days) => _call(
-        () => _dio.get('/v1/performance/summary', queryParameters: {'days': days}),
+  Future<PerformanceSummary> performanceSummary(int days, String tf) => _call(
+        () => _dio.get('/v1/performance/summary', queryParameters: {'days': days, 'tf': tf}),
         (data) => PerformanceSummary.fromJson(data as Json),
       );
 

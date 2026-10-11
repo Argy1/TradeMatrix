@@ -621,10 +621,14 @@ export interface components {
         PerformanceBaseline: {
             /** Naive */
             naive: number | null;
+            /** Reverse */
+            reverse: number | null;
             /** Always Up */
             always_up: number | null;
             /** Always Down */
             always_down: number | null;
+            /** Best */
+            best: number | null;
         };
         /** PerformanceOut */
         PerformanceOut: {
@@ -730,6 +734,8 @@ export interface components {
             model: number | null;
             /** Naive Baseline */
             naive_baseline: number | null;
+            /** Best Baseline */
+            best_baseline: number | null;
             /** N */
             n: number;
             /** Low Sample */

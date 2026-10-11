@@ -30,6 +30,24 @@ void main() {
       expect(formatDateTime(DateTime.utc(2026, 10, 3, 20, 30)), '4 Oct, 03:30 WIB'); // next day in WIB
     });
 
+    test('every candle size has words, and fast sizes count down in seconds', () {
+      expect(timeframeWords('1m'), '1 minute');
+      expect(timeframeWords('15m'), '15 minute');
+      expect(timeframeWords('4h'), '4 hour');
+      expect(timeframeWords('1d'), '1 day');
+      final now = DateTime.utc(2026, 10, 11, 12);
+      String left(int seconds) => formatCountdown(now.add(Duration(seconds: seconds)), now, seconds: true);
+      expect(left(42), 'in 42 s');
+      expect(left(119), 'in 119 s');
+      expect(left(200), 'in 3 min 20 s');
+      expect(left(300), 'in 5 min');
+      expect(left(1500), 'in 25 min'); // far away: minutes, like the slow sizes
+      expect(left(0), 'now');
+      expect(left(-30), 'now');
+      // Without the switch nothing changes for 1h, 4h and 1d.
+      expect(formatCountdown(now.add(const Duration(seconds: 42)), now), 'in 1 min');
+    });
+
     test('countdown and "ago"', () {
       final now = DateTime.utc(2026, 10, 3, 14, 19);
       expect(formatCountdown(DateTime.utc(2026, 10, 3, 15), now), 'in 41 min');

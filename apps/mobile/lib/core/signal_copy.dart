@@ -90,7 +90,17 @@ const reasonExplainers = {
   'bollinger': 'Bollinger Bands mark the usual price range; outside them, moves are stretched.',
   'momentum': 'How far the price moved over the last 24 candles.',
   'sentiment': 'The average tone of recent news headlines about this coin.',
+  'order_flow': 'Who was in a hurry. Buyers who do not wait push the price up; '
+      'sellers who do not wait push it down.',
 };
+
+/// Shown under every signal for a candle shorter than 1 hour (docs/06, approved by Argy).
+const fastNote = 'Short candles are mostly noise. Many signals will be Neutral, and fees are '
+    'usually larger than the move.';
+
+/// The shown signal's candle has closed and the next signal has not arrived yet (docs/08).
+const waitingTitle = 'Waiting for the next signal';
+const waitingForSignal = 'The candle this signal was for has closed.';
 
 const effectTag = {'up': 'Pushes up', 'down': 'Pushes down', 'none': 'No clear push'};
 

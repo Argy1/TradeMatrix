@@ -12,10 +12,11 @@ import '../../widgets/direction.dart';
 import '../../widgets/glass.dart';
 import '../../widgets/keycap.dart';
 import '../../widgets/page.dart';
+import '../../widgets/size_keys.dart';
 import '../../widgets/states.dart';
 
 /// Markets tab: a short hero with the 3D candle scene, every coin with its price and its
-/// three signals (1h, 4h, 1d), and the track-record strip.
+/// signal for the picked candle size, and the track-record strip.
 class MarketsScreen extends ConsumerWidget {
   const MarketsScreen({super.key});
 
@@ -26,7 +27,7 @@ class MarketsScreen extends ConsumerWidget {
       header: const BrandBar(),
       onRefresh: () async {
         ref.invalidate(marketsProvider);
-        ref.invalidate(performanceProvider(30));
+        ref.invalidate(performanceProvider);
       },
       children: [
         const _Hero(),
@@ -35,6 +36,8 @@ class MarketsScreen extends ConsumerWidget {
         const SizedBox(height: 4),
         Text('Tap a coin to see its signal and the reasons.', style: TmText.body(13, color: Tm.muted)),
         const SizedBox(height: 12),
+        // Eight chips per coin do not fit: the list shows the one size picked here (docs/08).
+        const SizeKeys(padding: EdgeInsets.only(bottom: 12)),
         markets.when(
           skipLoadingOnRefresh: true,
           skipLoadingOnReload: true,
@@ -50,7 +53,7 @@ class MarketsScreen extends ConsumerWidget {
           ),
         ),
         Text(
-          'Each chip is the chance for the next candle of that size. Neutral means the odds are too close, '
+          'The chip is the chance for the next candle of the picked size. Neutral means the odds are too close, '
           'so we make no call. A warning sign means that model is currently below the simple baseline.',
           style: TmText.body(12.5, color: Tm.muted2, height: 1.5),
         ),
@@ -93,6 +96,7 @@ class CoinRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final change = row.change24hPct;
+    final tf = ref.watch(selectedTimeframeProvider); // the one chip this row shows
     return Semantics(
       button: true,
       label: '${row.name}. Open its signal.',
@@ -134,14 +138,7 @@ class CoinRow extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  for (final tf in timeframes) ...[
-                    if (tf != timeframes.first) const SizedBox(width: 8),
-                    Expanded(child: _Chip(tf: tf, chip: row.signals[tf])),
-                  ],
-                ],
-              ),
+              _Chip(tf: tf, chip: row.signals[tf]),
             ],
           ),
         ),
@@ -204,7 +201,8 @@ class TrackStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(performanceProvider(30));
+    final tf = ref.watch(selectedTimeframeProvider);
+    final summary = ref.watch(performanceProvider((days: 30, tf: tf)));
     final overall = summary.valueOrNull?.overall;
     String pct(double? v) => v == null ? 'n/a' : formatProbability(v);
     return GlassCard(
@@ -220,7 +218,9 @@ class TrackStrip extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(child: _Stat(label: 'Accuracy, 30 days', value: overall == null ? '…' : pct(overall.accuracy))),
               const SizedBox(width: 8),
-              Expanded(child: _Stat(label: 'Simple baseline', value: overall == null ? '…' : pct(overall.naive))),
+              Expanded(
+                child: _Stat(label: 'Best simple rule', value: overall == null ? '…' : pct(overall.bestSimple)),
+              ),
             ],
           ),
           const SizedBox(height: 14),

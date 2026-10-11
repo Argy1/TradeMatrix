@@ -8,6 +8,7 @@ import 'package:tradematrix/data/models.dart';
 import 'package:tradematrix/data/providers.dart';
 import 'package:tradematrix/features/signals/signal_card.dart';
 import 'package:tradematrix/theme/tokens.dart';
+import 'package:tradematrix/widgets/keycap.dart';
 import 'package:tradematrix/data/live.dart';
 
 import 'fakes.dart';
@@ -95,6 +96,34 @@ void main() {
       );
     });
 
+    testWidgets('a fast signal whose candle has closed shows that we wait, not an old direction', (tester) async {
+      usePhone(tester);
+      final now = DateTime.now().toUtc();
+      Json fast(DateTime closes) => predictionJson()
+        ..['timeframe'] = '1m'
+        ..['target_open_time'] = closes.subtract(const Duration(minutes: 1)).toIso8601String()
+        ..['target_close_time'] = closes.toIso8601String();
+
+      // Still running: the normal card.
+      await tester.pumpWidget(card(Prediction.fromJson(fast(now.add(const Duration(seconds: 40))))));
+      await tester.pump();
+      expect(find.text('UP'), findsOneWidget);
+      expect(find.text('Waiting for the next signal'), findsNothing);
+
+      // Closed a minute ago and nothing newer arrived: no direction, no number.
+      await tester.pumpWidget(card(Prediction.fromJson(fast(now.subtract(const Duration(minutes: 1))))));
+      await tester.pump();
+      expect(find.text('Waiting for the next signal'), findsOneWidget);
+      expect(find.text('UP'), findsNothing);
+      expect(find.text('58.2%'), findsNothing);
+
+      // The slow sizes never switch to this state by themselves (their own "stale" notice covers it).
+      await tester.pumpWidget(card(Prediction.fromJson(predictionJson())));
+      await tester.pump();
+      expect(find.text('UP'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox()); // stop the card's one-second timer
+    });
+
     testWidgets('a Down signal shows the Down chance', (tester) async {
       usePhone(tester);
       await tester.pumpWidget(card(Prediction.fromJson(predictionJson(label: 'down', pUp: 0.38))));
@@ -131,19 +160,37 @@ void main() {
       expect(find.text('NEXT'), findsOneWidget); // the dashed column for the coming candle
       await tester.scrollUntilVisible(find.text('How reliable is it?'), 300);
       expect(find.text('Why this signal'), findsOneWidget);
-      expect(find.text('Baseline: repeat the last move'), findsOneWidget); // never accuracy alone
+      expect(find.text('Best simple rule'), findsOneWidget); // never accuracy alone
       await tester.scrollUntilVisible(find.text('A made-up headline for the test'), 300);
       expect(find.textContaining('news is context only'), findsOneWidget);
     });
 
-    testWidgets('markets list shows three chips per coin and flags a weak model', (tester) async {
+    testWidgets('markets list shows the chip of the picked candle size and flags a weak model', (tester) async {
       usePhone(tester);
       await tester.pumpWidget(appAt('/markets', FakeApi()));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Ethereum'), 300);
+      // All eight sizes are offered, fast ones first; 1h is picked at the start.
+      for (final size in ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d']) {
+        expect(find.widgetWithText(KeyButton, size), findsOneWidget);
+      }
+      // The page scrolls up and down; the size keys scroll sideways inside it.
+      final page = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(find.text('Ethereum'), 300, scrollable: page);
       expect(find.text('Bitcoin'), findsOneWidget);
-      expect(find.text('1d · no signal'), findsWidgets); // a missing signal is said, not hidden
+
+      Future<void> pick(String size) async {
+        await tester.ensureVisible(find.widgetWithText(KeyButton, size));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(KeyButton, size));
+        await tester.pumpAndSettle();
+      }
+
+      await pick('4h');
       expect(find.bySemanticsLabel(RegExp('4h: Neutral, 51.0%, model below baseline')), findsWidgets);
+      await pick('1d');
+      expect(find.text('1d · no signal'), findsWidgets); // a missing signal is said, not hidden
+      await pick('5m');
+      expect(find.text('5m · no signal'), findsWidgets); // the fake data has no fast signals
     });
 
     testWidgets('alerts ask a signed-out visitor to sign in', (tester) async {
