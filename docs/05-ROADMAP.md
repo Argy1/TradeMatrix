@@ -177,6 +177,72 @@ Started on 2026-10-10 by Argy's decision while Gate 4 is still open (Gate 4 wait
 
 ---
 
+## Phase 5b — Fast candle sizes (scope change by Argy, 2026-10-11)
+
+Goal: signals for 1m, 3m, 5m, 15m and 30m candles on the website and in the app, measured honestly before they are shown. It runs next to Phase 5, whose open items wait for Argy.
+
+Argy's decisions on 2026-10-11: 15m takes the place of 10m (Binance has no 10m candle); pay for Supabase Pro; a size that fails the test is still shown, with the below-baseline warning.
+
+### Step 1 — Research (no change to production)
+
+- [x] History files: `python -m app.data.history` downloaded 12 to 36 months of candles for 16 coins and 5 sizes into `backend/data/history/` (80 files, about 540 MB, git-ignored).
+- [x] Settings per size and three candidates, compared on BTC, ETH, SOL, DOGE on folds before the evaluation period (`reports/tuning_*_2026-10-11.md`). Chosen: one pooled model with order-flow features for 3m, 5m, 15m, 30m; a plain model per coin for 1m (a tie, broken by the accuracy edge).
+- [x] A flat next candle has no label and no result on the fast sizes. Found while measuring: up to half of the one-minute candles of low-priced coins close at the same price, and counted as "not up" they would teach a model to say Down all day.
+- [x] Four simple rules instead of one. "Reverse the last candle" was added after the first evaluation: on short candles prices bounce between two neighbouring price steps, so that one-line rule beats a coin flip. A model now has to beat the best of the four (also the slow sizes, at their next training).
+- [x] Final evaluation of all 16 coins on 5 sizes: `backend/reports/summary_30m_15m_5m_3m_1m_2026-10-11.md` and one report per coin and size.
+
+**Gate 5b-1** passed on 2026-10-11 (the table exists for all 80 coin-size pairs). Averages over the 16 coins, on the evaluation period only:
+
+| Size | Coins that passed | Signals that are Up or Down | Accuracy of those | Best simple rule | Flat candles | Simulated result after fees | Buy and hold |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1m | 10 of 16 | 24.7% | 58.6% | 52.2% | 18.8% | -97.4% | 59.2% |
+| 3m | 7 of 16 | 19.9% | 55.9% | 51.6% | 11.1% | -100.0% | 41.0% |
+| 5m | 11 of 16 | 21.1% | 56.2% | 51.9% | 9.6% | -100.0% | 49.7% |
+| 15m | 1 of 16 | 15.2% | 54.3% | 51.8% | 5.8% | -90.8% | 49.4% |
+| 30m | 2 of 16 | 5.2% | 53.5% | 51.6% | 4.2% | -26.6% | 47.8% |
+
+How to read it:
+
+- **31 of 80 pairs passed** ("ok"); the others are shown with the below-baseline warning. Passed:
+  - 1m: BTC, ETH, ADA, UNI, NEAR, LTC, TRX, DOT, BCH, XLM
+  - 3m: ADA, NEAR, LTC, TRX, DOT, BCH, XLM
+  - 5m: ETH, SOL, ADA, AVAX, UNI, NEAR, LTC, TRX, DOT, BCH, XLM
+  - 15m: LTC
+  - 30m: ETH, LTC
+- **Accurate is not the same as useful.** The accuracy is real, but on short candles much of it is the price bouncing between the buy price and the sell price. That bounce is smaller than the fee: the simulated strategy (hold while the signal says Up, 0.1% fee and 0.05% slippage per trade) loses almost everything on every fast size, while buy and hold did not. The apps say this under every fast signal.
+- Most signals are still Neutral: an Up or Down call is made on a minority of the candles.
+
+### Step 2 — Backend (built on branch `phase-5b`, not deployed)
+
+- [x] Sizes in one place (`app/timeframes.py`); no hard-coded size list is left in a query or a text.
+- [x] A pipeline of its own for the fast sizes, every minute at second :01 (`fast_close`), with its own job names; the hourly run is unchanged. All coins are read from the exchange at once, the exchange clock is asked every 30 seconds, candles are kept in memory between runs (only new ones are read), and all signals of a run are stored by one statement. Model files and candles are loaded at start-up.
+- [x] Migrations `20261011230000_fast_timeframes` and `20261011230100_fast_timeframes_validate`, applied on 2026-10-11 (wider checks, `flat`, order flow on candles, `signal_stats_daily`). They only widen and add; the running system was not affected.
+- [x] Track record from daily counts (`summarize_signals` every hour), clean-up of raw fast rows after 90 days (`prune_fast_history`), freshness judged per size, alerts on fast sizes with a cooldown of 15 minutes or more.
+- [x] Fast models trained on all history and registered (`train_models`), one status per coin. The running worker ignores them until the new worker is deployed.
+- [x] First candles of the fast sizes loaded (9,600 per coin). Daily counts built for the signals that already existed.
+- [x] Tests: 240 unit tests, 24 database tests against the real tables (rolled back), `ruff` clean.
+- [x] Rehearsal: 30 minutes on 2026-10-11 (17:00 to 17:29 UTC), run from Argy's PC with every minute rolled back: 784 of 784 expected signals, no errors, no repeated requests. The 1m signal was ready 3.3 s after the close in the middle case and within 4.3 s in 95% of the runs (slowest 5.9 s, at 17:00 when all five sizes closed together). The larger sizes follow the 1m signal: 5.0 s in the middle case, slowest 11.5 s. The first rehearsal was too slow (5 to 9 s when several sizes closed together), which led to the in-memory candles, the single-statement writes and the 1m-first order.
+
+**Gate 5b-2:** passed on 2026-10-11. Check: `uv run python -m app.worker.rehearsal --minutes 30`.
+
+### Step 3 — Go live in the backend (needs Argy first)
+
+- [ ] Argy: upgrade Supabase to Pro. The fast sizes add about 32 MB a day; the free database (500 MB, 165 MB used on 2026-10-11) would be full in about ten days. Pro is billed per organization and its compute credit covers one project, so move `AgriVision` or `TradeMatrix` to its own organization first.
+- [ ] Deploy `api`, then `worker` between two hourly runs (merge `phase-5b` to `main` after that; the website's new code needs the new API).
+- [ ] Watch one day.
+
+**Gate 5b-3:** 24 hours live: at least 99% of the expected fast signals stored, a one-minute signal ready within 5 seconds of the close for 95% of the runs, no error streak longer than 2 minutes, growth near 32 MB a day, every hourly 1h/4h/1d run complete.
+
+### Step 4 — Website and app (written and tested on the branch, not deployed)
+
+- [x] Website: size switch (fast, divider, slow) on the coin page, markets list, watchlist and track record; seconds countdown; "Waiting for the next signal" after a fast candle closes; Flat results; best simple rule and the four rules in the track record. Checked locally against the branch API: size switch, 1m and 5m charts, track record.
+- [x] App: the same, with shared size keys; 29 tests, `flutter analyze` clean.
+- [ ] After Gate 5b-3: merge to `main` (Vercel deploys the website), check a one-minute signal on live data in both, build and send the new APK.
+
+**Gate 5b-4:** checks pass and both clients show a one-minute signal changing within seconds of the close on live data.
+
+---
+
 ## Phase 6 — Hardening and launch (weeks 15–16)
 
 - [ ] Tests across backend, web, mobile; CI green on every push.
