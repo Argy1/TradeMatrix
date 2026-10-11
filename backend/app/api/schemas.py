@@ -125,8 +125,10 @@ class PredictionOut(BaseModel):
 
 class OutcomeOut(BaseModel):
     target_close: str
+    # up / down / flat. "flat" (same close as before) exists only on sizes under 1h and has no
+    # result; on 1h, 4h and 1d a flat close counts as down.
     actual_direction: str
-    correct: bool | None  # null for Neutral (no call)
+    correct: bool | None  # null for Neutral (no call) and for a flat candle (no result)
     return_pct: float
 
 
@@ -159,7 +161,7 @@ class MarketRow(BaseModel):
     name: str
     last_price: str | None  # close of the latest closed 1h candle
     change_24h_pct: float | None
-    signals: dict[str, SignalChip | None]  # "1h" / "4h" / "1d"
+    signals: dict[str, SignalChip | None]  # one entry per candle size, "1m" to "1d"
 
 
 class LabelStats(BaseModel):
@@ -170,6 +172,7 @@ class LabelStats(BaseModel):
 class PerformanceBaseline(BaseModel):
     naive: float | None
     always_up: float | None
+    always_down: float | None
 
 
 class PerformanceOut(BaseModel):
@@ -177,7 +180,8 @@ class PerformanceOut(BaseModel):
     timeframe: str | None
     days: int
     n_predictions: int
-    n_resolved: int
+    n_resolved: int  # signals with a result (the candle closed up or down)
+    n_flat: int  # fast sizes: the candle closed flat, so the signal has no result
     coverage: float | None
     accuracy: float | None
     baseline: PerformanceBaseline
@@ -191,6 +195,7 @@ class PerformanceSummary(BaseModel):
     """Every coin x timeframe in one response (the track-record page makes one request)."""
 
     days: int
+    timeframe: str | None  # set when the request asked for one candle size only
     overall: PerformanceOut
     rows: list[PerformanceOut]
 

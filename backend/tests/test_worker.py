@@ -70,7 +70,7 @@ def test_scheduler_has_every_job_at_its_time() -> None:
     jobs = {job.id: job for job in scheduler.get_jobs()}
     assert set(jobs) == {
         "candle_close", "fast_close", "ingest_news", "score_sentiment", "check_price_alerts",
-        "heartbeat",
+        "summarize_signals", "summarize_signals_week", "prune_fast_history", "heartbeat",
     }  # fmt: skip
 
     def fires(job_id: str, count: int) -> list[str]:
@@ -85,6 +85,11 @@ def test_scheduler_has_every_job_at_its_time() -> None:
     assert fires("candle_close", 2) == ["12:00:05", "13:00:05"]  # 5 s after each hourly close
     assert fires("fast_close", 3) == ["12:00:02", "12:01:02", "12:02:02"]  # every minute
     assert jobs["fast_close"].misfire_grace_time == 20  # a late fast run is dropped
+    assert fires("summarize_signals", 2) == ["12:10:40", "13:10:40"]
+    # Once a day: recount the week, then delete what is past its keep time (90 days).
+    assert fires("summarize_signals_week", 1) == ["00:20:40"]
+    assert fires("prune_fast_history", 1) == ["00:40:40"]
+    assert settings.fast_retention_days == 90
     assert fires("ingest_news", 5) == ["12:02:00", "12:17:00", "12:32:00", "12:47:00", "13:02:00"]
     assert fires("score_sentiment", 4) == ["12:04:00", "12:19:00", "12:34:00", "12:49:00"]
     assert fires("check_price_alerts", 2) == ["12:00:30", "12:01:30"]  # every minute

@@ -18,6 +18,7 @@ from app.data.ingest import ingest_candles
 from app.data.news import NewsSource
 from app.data.news.ingest import ingest_news
 from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
+from app.ml.stats import prune_fast_history, summarize_signals
 from app.sentiment.score import Scorer, score_sentiment
 from app.timeframes import FAST_TIMEFRAMES, SLOW_TIMEFRAMES, floor_time
 
@@ -158,6 +159,24 @@ def sentiment_job(scorer: Scorer, max_per_run: int, batch_size: int, max_per_day
         if details["budget_reached"]:
             log("sentiment_budget_reached", max_per_day=max_per_day)
         return details
+
+    return work
+
+
+def summary_job(days_back: int):
+    """Add the signals up per coin, size and day (the track record reads these counts)."""
+
+    async def work(session: AsyncSession) -> dict:
+        return await summarize_signals(session, days_back=days_back)
+
+    return work
+
+
+def prune_job(keep_days: int):
+    """Delete raw fast-size signals and candles that are older than `keep_days`."""
+
+    async def work(session: AsyncSession) -> dict:
+        return await prune_fast_history(session, keep_days=keep_days)
 
     return work
 

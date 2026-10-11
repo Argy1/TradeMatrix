@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     sentiment_max_per_run: int = 40
     sentiment_batch_size: int = 20
     sentiment_max_per_day: int = 400
+    # Raw signals and candles of the fast sizes (under 1h) are deleted after this many
+    # days. Their daily counts are kept forever (app/ml/stats.py).
+    fast_retention_days: int = 90
 
     exchange: str = "binance"
     binance_rest_url: str = "https://data-api.binance.vision"

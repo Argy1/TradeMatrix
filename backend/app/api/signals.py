@@ -1,6 +1,6 @@
 """Public signal endpoints: latest signal, history, markets overview and track record."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -24,7 +24,8 @@ from app.api.schemas import (
 )
 from app.api.v1 import Db
 from app.data import repo
-from app.ml.performance import Resolved, performance
+from app.ml import stats
+from app.ml.performance import Resolved, Totals, from_totals, performance
 from app.timeframes import (
     TIMEFRAMES,
     Timeframe,
@@ -54,12 +55,9 @@ async def _asset_or_404(session: AsyncSession, symbol: str) -> repo.Asset:
 
 
 async def resolved_rows(
-    session: AsyncSession,
-    asset_id: int | None,
-    timeframe: str | None,
-    since: datetime | None = None,
-    limit: int = 100_000,
+    session: AsyncSession, asset_id: int, timeframe: str, limit: int
 ) -> list[Resolved]:
+    """The newest signals of one coin and size that have a result (for the signal card)."""
     rows = await session.execute(
         text(
             f"""
@@ -68,16 +66,34 @@ async def resolved_rows(
             join prediction_outcomes o on o.prediction_id = p.id
             left join candles prev on prev.asset_id = p.asset_id
               and prev.timeframe = p.timeframe and prev.open_time = {_PREVIOUS}
-            where (cast(:a as smallint) is null or p.asset_id = :a)
-              and (cast(:tf as text) is null or p.timeframe = :tf)
-              and (cast(:since as timestamptz) is null or p.target_open_time >= :since)
+            where p.asset_id = :a and p.timeframe = :tf
+              and o.actual_direction <> 'flat'  -- a flat candle has no result
             order by p.target_open_time desc
             limit :limit
             """
         ),
-        {"a": asset_id, "tf": timeframe, "since": since, "limit": limit},
+        {"a": asset_id, "tf": timeframe, "limit": limit},
     )
     return [Resolved(float(r[0]), r[1], r[2], r[3]) for r in rows]
+
+
+def first_day(days: int) -> date:
+    """The track record counts whole UTC days: today and the `days` days before it."""
+    return (datetime.now(UTC) - timedelta(days=days)).date()
+
+
+def performance_row(
+    symbol: str | None, timeframe: str | None, days: int, counts: tuple[int, int, Totals]
+) -> PerformanceOut:
+    n_signals, n_flat, totals = counts
+    return PerformanceOut(
+        symbol=symbol,
+        timeframe=timeframe,
+        days=days,
+        n_predictions=n_signals,
+        n_flat=n_flat,
+        **from_totals(totals),
+    )
 
 
 @router.get("/predictions/latest", response_model=PredictionOut)
@@ -102,7 +118,7 @@ async def latest_prediction(session: Db, symbol: str, tf: Timeframe) -> Predicti
         raise ApiError(404, "not_found", "No prediction yet for this coin and timeframe")
     label, p_up, base_open, target_open, base_close, reasons, sentiment, k = row[:8]
     mid, trained, status = row[8:]
-    recent = performance(await resolved_rows(session, asset.id, tf, limit=200))
+    recent = performance(await resolved_rows(session, asset.id, tf, 200))
     return PredictionOut(
         symbol=asset.symbol,
         timeframe=tf,
@@ -244,85 +260,39 @@ async def track_record(
     tf: Timeframe | None = None,
     days: Annotated[int, Query(ge=1, le=365)] = 30,
 ) -> PerformanceOut:
-    """Live track record: model accuracy next to the baselines, always (docs/06)."""
+    """Live track record: model accuracy next to the baselines, always (docs/06).
+
+    Read from the daily counts (signal_stats_daily), which the worker refreshes every hour.
+    """
     asset_id = (await _asset_or_404(session, symbol)).id if symbol else None
-    since = datetime.now(UTC) - timedelta(days=days)
-    n_predictions = (
-        await session.execute(
-            text(
-                """
-                select count(*) from predictions p
-                where (cast(:a as smallint) is null or p.asset_id = :a)
-                  and (cast(:tf as text) is null or p.timeframe = :tf)
-                  and p.target_open_time >= :since
-                """
-            ),
-            {"a": asset_id, "tf": tf, "since": since},
-        )
-    ).scalar_one()
-    stats = performance(await resolved_rows(session, asset_id, tf, since))
-    return PerformanceOut(
-        symbol=symbol.upper() if symbol else None,
-        timeframe=tf,
-        days=days,
-        n_predictions=n_predictions,
-        **stats,
-    )
+    counts = await stats.totals(session, asset_id, tf, first_day(days))
+    return performance_row(symbol.upper() if symbol else None, tf, days, counts)
 
 
 @router.get("/performance/summary", response_model=PerformanceSummary)
 async def track_record_summary(
-    session: Db, days: Annotated[int, Query(ge=1, le=365)] = 30
+    session: Db,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+    tf: Timeframe | None = None,
 ) -> PerformanceSummary:
-    """Live track record for every active coin and timeframe, plus the overall numbers."""
-    since = datetime.now(UTC) - timedelta(days=days)
-    counts = {
-        (symbol, tf): n
-        for symbol, tf, n in await session.execute(
-            text(
-                """
-                select a.symbol, p.timeframe, count(*) from predictions p
-                join assets a on a.id = p.asset_id
-                where p.target_open_time >= :since group by 1, 2
-                """
-            ),
-            {"since": since},
-        )
-    }
-    rows = await session.execute(
-        text(
-            f"""
-            select a.symbol, p.timeframe, p.p_up, p.label, o.actual_direction,
-                   (p.base_close > prev.close) as prev_up
-            from predictions p
-            join assets a on a.id = p.asset_id
-            join prediction_outcomes o on o.prediction_id = p.id
-            left join candles prev on prev.asset_id = p.asset_id
-              and prev.timeframe = p.timeframe and prev.open_time = {_PREVIOUS}
-            where p.target_open_time >= :since
-            """
-        ),
-        {"since": since},
-    )
-    grouped: dict[tuple[str, str], list[Resolved]] = {}
-    everything: list[Resolved] = []
-    for symbol, tf, p_up, label, actual, prev_up in rows:
-        item = Resolved(float(p_up), label, actual, prev_up)
-        grouped.setdefault((symbol, tf), []).append(item)
-        everything.append(item)
+    """Live track record for every active coin and candle size, plus the overall numbers.
 
-    def row(symbol: str | None, tf: str | None, items: list[Resolved], n: int) -> PerformanceOut:
-        return PerformanceOut(
-            symbol=symbol, timeframe=tf, days=days, n_predictions=n, **performance(items)
-        )
-
+    With `tf`, only that size (rows and overall). The fast sizes make far more signals than
+    the slow ones, so an overall number across all sizes is mostly a one-minute number.
+    """
+    by_pair = await stats.totals_by_pair(session, tf, first_day(days))
+    nothing = (0, 0, Totals())
+    overall = nothing
+    for n_signals, n_flat, totals in by_pair.values():
+        overall = (overall[0] + n_signals, overall[1] + n_flat, overall[2] + totals)
     assets = await repo.list_assets(session)
     return PerformanceSummary(
         days=days,
-        overall=row(None, None, everything, sum(counts.values())),
+        timeframe=tf,
+        overall=performance_row(None, tf, days, overall),
         rows=[
-            row(a.symbol, tf, grouped.get((a.symbol, tf), []), counts.get((a.symbol, tf), 0))
+            performance_row(a.symbol, size, days, by_pair.get((a.id, size), nothing))
             for a in assets
-            for tf in TIMEFRAMES
+            for size in ([tf] if tf else TIMEFRAMES)
         ],
     )

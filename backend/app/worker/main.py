@@ -32,8 +32,10 @@ from app.worker.jobs import (
     log,
     news_job,
     price_alerts_job,
+    prune_job,
     run_job,
     sentiment_job,
+    summary_job,
 )
 
 
@@ -112,6 +114,37 @@ def build_scheduler(
         max_instances=1,
         coalesce=True,
         misfire_grace_time=30,
+    )
+    # The track record reads daily counts. Every hour at :10:40 the last two days are
+    # recounted (today is still filling up); once a day the last week, which also picks up
+    # signals that got their result late, for example after the worker was down.
+    scheduler.add_job(
+        run_job,
+        CronTrigger(minute=10, second=40, timezone="UTC"),
+        args=["summarize_signals", summary_job(days_back=2)],
+        id="summarize_signals",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=900,
+    )
+    scheduler.add_job(
+        run_job,
+        CronTrigger(hour=0, minute=20, second=40, timezone="UTC"),
+        args=["summarize_signals_week", summary_job(days_back=7)],
+        id="summarize_signals_week",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    # After the weekly recount: delete raw fast-size rows past their keep time.
+    scheduler.add_job(
+        run_job,
+        CronTrigger(hour=0, minute=40, second=40, timezone="UTC"),
+        args=["prune_fast_history", prune_job(settings.fast_retention_days)],
+        id="prune_fast_history",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         run_job,
