@@ -149,8 +149,14 @@ def candidates(timeframe: str) -> list[ModelConfig]:
         return [
             ModelConfig("fast_basic", windows, STRONG_REG, **fast),
             ModelConfig("fast_flow", windows, STRONG_REG, extended=True, **fast),
+            # One fit on all coins at once is a large job: let it use more of the machine.
             ModelConfig(
-                "fast_flow_pooled", windows, STRONG_REG, extended=True, pooled=True, **fast
+                "fast_flow_pooled",
+                windows,
+                STRONG_REG | {"n_jobs": 12},
+                extended=True,
+                pooled=True,
+                **fast,
             ),
         ]
     return [
@@ -165,7 +171,20 @@ def candidates(timeframe: str) -> list[ModelConfig]:
 # Set from reports/tuning_*.md (development window only).
 # 2026-10-03, reports/tuning_2026-10-02.md: highest development-window Brier gain per timeframe
 # (4h tie with bigval_strongreg broken by the accuracy edge; 1d has only 5 folds, keep v1).
-CHOSEN: dict[str, str] = {"1h": "expanding_strongreg", "4h": "expanding_strongreg", "1d": "v1"}
+CHOSEN: dict[str, str] = {
+    "1h": "expanding_strongreg",
+    "4h": "expanding_strongreg",
+    "1d": "v1",
+    # Fast sizes, 2026-10-11, reports/tuning_*_2026-10-11.md (four coins, folds before
+    # FAST_EVAL_FROM). The pooled model with order flow had the highest Brier gain on 3m, 5m,
+    # 15m and 30m. On 1m the three candidates tied (+0.00054 / +0.00054 / +0.00053); as for 4h
+    # before, the tie is broken by the accuracy edge, which the plain per-coin model leads.
+    "1m": "fast_basic",
+    "3m": "fast_flow_pooled",
+    "5m": "fast_flow_pooled",
+    "15m": "fast_flow_pooled",
+    "30m": "fast_flow_pooled",
+}
 
 
 def chosen(timeframe: str) -> ModelConfig:

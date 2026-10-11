@@ -92,11 +92,17 @@ def test_real_signal_endpoints(real_client: TestClient) -> None:
 
     markets = real_client.get("/v1/markets").json()
     assert [m["symbol"] for m in markets][:5] == ["BTC", "ETH", "SOL", "BNB", "XRP"]
-    assert set(markets[0]["signals"]) == {"1h", "4h", "1d"}
+    assert list(markets[0]["signals"]) == ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]
+    assert markets[0]["signals"]["1h"]["label"] in {"up", "down", "neutral"}
     assert markets[0]["last_price"] and markets[0]["change_24h_pct"] is not None
 
     summary = real_client.get("/v1/performance/summary?days=30").json()
-    assert len(summary["rows"]) == 3 * len(markets)  # every coin x 1h/4h/1d, in one response
+    assert len(summary["rows"]) == 8 * len(markets)  # every coin x every size, in one response
+    hourly = real_client.get("/v1/performance/summary?days=30&tf=1h").json()
+    assert hourly["timeframe"] == "1h" and len(hourly["rows"]) == len(markets)
+    assert {r["timeframe"] for r in hourly["rows"]} == {"1h"}
+    assert hourly["overall"]["n_predictions"] == sum(r["n_predictions"] for r in hourly["rows"])
+    assert hourly["overall"]["n_resolved"] > 100 and hourly["overall"]["baseline"]["always_down"]
     assert summary["overall"]["n_predictions"] == sum(r["n_predictions"] for r in summary["rows"])
 
     perf = real_client.get("/v1/performance?days=30").json()

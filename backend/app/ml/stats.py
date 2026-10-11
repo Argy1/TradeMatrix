@@ -65,6 +65,7 @@ _SUMMARIZE = text(
         and prev.timeframe = p.timeframe and prev.open_time = {_PREVIOUS}
       where p.asset_id = a.id and p.timeframe = tf.timeframe
         and p.target_open_time >= :since
+        and (cast(:until as timestamptz) is null or p.target_open_time < :until)
       group by 1
     ) s
     on conflict (asset_id, timeframe, day) do update set
@@ -90,14 +91,17 @@ async def summarize_signals(
     days_back: int = 2,
     now: datetime | None = None,
     since: datetime | None = None,
+    until: datetime | None = None,
 ) -> dict:
-    """Recount whole days, from `days_back` days ago (or `since`) until now.
+    """Recount whole days, from `days_back` days ago (or `since`) until now (or `until`).
 
     Idempotent: a day is always counted from its raw rows, so running it twice (or again an
     hour later, when more signals have their result) just writes the newer numbers.
     """
     since = since or day_start(now or datetime.now(UTC)) - timedelta(days=days_back)
-    rows = await session.execute(_SUMMARIZE, {"timeframes": list(TIMEFRAMES), "since": since})
+    rows = await session.execute(
+        _SUMMARIZE, {"timeframes": list(TIMEFRAMES), "since": since, "until": until}
+    )
     return {"days": len(rows.all()), "since": since.date().isoformat()}
 
 

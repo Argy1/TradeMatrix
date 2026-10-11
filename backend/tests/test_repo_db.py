@@ -303,6 +303,14 @@ async def test_headlines_are_scored_once_within_the_budget(session: AsyncSession
         Headline("feed-a", "The model never answers this", f"{site}/s/2", now - timedelta(hours=3)),
         Headline("feed-a", "Bitcoin news from yesterday", f"{site}/s/3", now - timedelta(hours=30)),
     ]
+    # Real headlines that were never scored would be picked up by the job as well, and the
+    # counts below would depend on the day. Remove them here (the rollback puts them back).
+    await session.execute(
+        text(
+            "delete from news_items n "
+            "where not exists (select 1 from sentiments s where s.news_id = n.id)"
+        )
+    )
     assert await store_headlines(session, headlines, ["BTC", "ETH"], now) == 3
     scorer, tries = TitleScorer(), {}
 
