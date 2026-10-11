@@ -2,7 +2,7 @@
 
     uv run python -m app.worker.rehearsal --minutes 30
 
-Two seconds after every minute it runs the same steps as `fast_close` (read the candles that
+One second after every minute it runs the same steps as `fast_close` (read the candles that
 just closed for every coin, predict, fill in results) inside one transaction, measures how
 long after the close the signals were ready, and then ROLLS THE TRANSACTION BACK. Nothing it
 writes stays in the database.
@@ -28,17 +28,24 @@ from app.config import get_settings
 from app.data import repo
 from app.data.exchanges import get_exchange_client
 from app.data.ingest import ingest_many
-from app.ml.predict import ModelCache, active_models, resolve_outcomes, run_predictions
+from app.ml.predict import (
+    FrameCache,
+    ModelCache,
+    active_models,
+    resolve_outcomes,
+    run_predictions,
+    warm_up,
+)
 from app.ml.storage import ModelStorage
 from app.timeframes import FAST_TIMEFRAMES, floor_time
 from app.worker.jobs import closed_fast_timeframes
 
-START_SECOND = 2  # the live job starts two seconds after the minute
+START_SECOND = 1  # the live job starts one second after the minute
 MIN_STORED = 0.99
 MAX_DELAY = 5.0  # seconds from the close until the signals are ready, for 95% of the runs
 
 
-async def one_run(factory, client, cache: ModelCache, blend_k: float) -> dict:
+async def one_run(factory, client, cache: ModelCache, frames: FrameCache, blend_k: float) -> dict:
     started = datetime.now(UTC)
     close = floor_time(started, "1m")  # the candle close this run belongs to
     sizes = closed_fast_timeframes(started)
@@ -51,7 +58,9 @@ async def one_run(factory, client, cache: ModelCache, blend_k: float) -> dict:
                 session, client, await repo.list_assets(session), sizes, now=started
             )
             read_s = time.monotonic() - clock
-            predicted = await run_predictions(session, cache, sizes, started, blend_k=blend_k)
+            predicted = await run_predictions(
+                session, cache, sizes, started, blend_k=blend_k, frames=frames
+            )
             ready = datetime.now(UTC)
             await resolve_outcomes(session, list(FAST_TIMEFRAMES), look_back=timedelta(hours=2))
         finally:
@@ -63,6 +72,7 @@ async def one_run(factory, client, cache: ModelCache, blend_k: float) -> dict:
         "created": predicted["created"],
         "skipped": predicted["skipped"],
         "errors": ingested["errors"] + predicted["errors"],
+        "retried": ingested["retried"],
         "read_s": read_s,
         "delay_s": (ready - close).total_seconds(),
         "total_s": time.monotonic() - clock,
@@ -79,18 +89,26 @@ async def rehearse(minutes: int) -> bool:
         settings.supabase_url, settings.supabase_service_role_key, settings.supabase_models_bucket
     )
     cache = ModelCache(storage)
+    # Kept between the minutes, like in the live worker. The candles it holds are real
+    # exchange candles, so it stays right although each minute's writes are rolled back.
+    frames = FrameCache()
     runs: list[dict] = []
     try:
+        # The live worker loads model files and candles at start-up; do the same here.
+        async with factory() as session:
+            warmed = await warm_up(session, cache, frames, list(FAST_TIMEFRAMES))
+        print(f"warm-up: {warmed['models']} models loaded, errors: {warmed['errors']}", flush=True)
         for _ in range(minutes):
             now = datetime.now(UTC)
             next_start = floor_time(now, "1m") + timedelta(minutes=1, seconds=START_SECOND)
             await asyncio.sleep((next_start - now).total_seconds())
-            run = await one_run(factory, client, cache, settings.sentiment_blend_k)
+            run = await one_run(factory, client, cache, frames, settings.sentiment_blend_k)
             runs.append(run)
             print(
                 f"{run['close']:%H:%M} sizes={','.join(run['sizes']):18} "
                 f"signals={run['created']:3}/{run['expected']:3} read={run['read_s']:.1f}s "
                 f"ready {run['delay_s']:.1f}s after the close"
+                + (f" (asked again for {run['retried']})" if run["retried"] else "")
                 + (f"  errors={run['errors'][:2]}" if run["errors"] else ""),
                 flush=True,
             )

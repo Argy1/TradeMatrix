@@ -17,7 +17,7 @@ from app.data.exchanges import ExchangeClient
 from app.data.ingest import ingest_many
 from app.data.news import NewsSource
 from app.data.news.ingest import ingest_news
-from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
+from app.ml.predict import FrameCache, ModelCache, resolve_outcomes, run_predictions, warm_up
 from app.ml.stats import prune_fast_history, summarize_signals
 from app.sentiment.score import Scorer, score_sentiment
 from app.timeframes import FAST_TIMEFRAMES, SLOW_TIMEFRAMES, floor_time
@@ -112,12 +112,31 @@ async def heartbeat_work(_session: AsyncSession) -> dict:
     return {}
 
 
-def predictions_job(cache: ModelCache, blend_k: float, timeframes: list[str] | None = None):
+def predictions_job(
+    cache: ModelCache,
+    blend_k: float,
+    timeframes: list[str] | None = None,
+    frames: FrameCache | None = None,
+):
     async def work(session: AsyncSession) -> dict:
         now = datetime.now(UTC)
         return await run_predictions(
-            session, cache, timeframes or closed_timeframes(now), now, blend_k=blend_k
+            session,
+            cache,
+            timeframes or closed_timeframes(now),
+            now,
+            blend_k=blend_k,
+            frames=frames,
         )
+
+    return work
+
+
+def warm_up_job(cache: ModelCache, frames: FrameCache):
+    """At start-up: model files and candles of the fast sizes into memory (see warm_up)."""
+
+    async def work(session: AsyncSession) -> dict:
+        return await warm_up(session, cache, frames, list(FAST_TIMEFRAMES))
 
     return work
 
@@ -208,7 +227,9 @@ async def candle_close(
     await run_job("evaluate_alerts", alerts_work)
 
 
-async def fast_close(client: ExchangeClient, cache: ModelCache, blend_k: float) -> None:
+async def fast_close(
+    client: ExchangeClient, cache: ModelCache, blend_k: float, frames: FrameCache
+) -> None:
     """The same four steps for the fast sizes, every minute.
 
     It is a pipeline of its own, with its own job names (locks and heartbeats), so the hourly
@@ -216,13 +237,13 @@ async def fast_close(client: ExchangeClient, cache: ModelCache, blend_k: float) 
     check shares its name: if both arrive at the same second, one skips, and the next
     minute's run picks the alerts up.
 
-    The sizes are fixed once at the start: a run that begins at 12:05:02 handles the candles
+    The sizes are fixed once at the start: a run that begins at 12:05:01 handles the candles
     that closed at 12:05:00, even if a step finishes after the minute has turned.
     """
     sizes = closed_fast_timeframes(datetime.now(UTC))
     quiet = {"quiet_when_idle": True}  # 1,440 "all fine" lines a day per step would bury the rest
     await run_job("ingest_candles_fast", ingest_job(client, sizes), **quiet)
-    await run_job("run_predictions_fast", predictions_job(cache, blend_k, sizes))
+    await run_job("run_predictions_fast", predictions_job(cache, blend_k, sizes, frames))
     # Only the newest signals can have just received their result; older ones are caught by
     # the catch-up at start.
     recent = outcomes_job(list(FAST_TIMEFRAMES), look_back=timedelta(hours=2))

@@ -67,6 +67,60 @@ class ModelCache:
         return self._bundles[path]
 
 
+class FrameCache:
+    """The newest candles of every coin and size, kept in memory between two runs.
+
+    The every-minute run needs the last 1,000 candles of 16 coins to build its features. A
+    closed candle never changes, so after the first run only the candles that are new since
+    then are read: one row per coin instead of a thousand. If anything does not line up (a
+    gap, a coin that was not held), that size is read in full again: a slower run, never a
+    wrong one.
+    """
+
+    def __init__(self) -> None:
+        self._held: dict[str, dict[int, repo.FeatureFrame]] = {}
+
+    async def get(
+        self, session: AsyncSession, asset_ids: list[int], timeframe: str, limit: int
+    ) -> dict[int, repo.FeatureFrame]:
+        held = self._held.get(timeframe)
+        frames = None
+        if held is not None and set(asset_ids) <= set(held):
+            since = min(held[asset_id].frame.index[-1] for asset_id in asset_ids)
+            newer = await repo.feature_frames(session, asset_ids, timeframe, limit, after=since)
+            frames = self._extended(held, newer, asset_ids, timeframe, limit)
+        if frames is None:
+            frames = await repo.feature_frames(session, asset_ids, timeframe, limit)
+        self._held[timeframe] = frames
+        return frames
+
+    @staticmethod
+    def _extended(
+        held: dict[int, repo.FeatureFrame],
+        newer: dict[int, repo.FeatureFrame],
+        asset_ids: list[int],
+        timeframe: str,
+        limit: int,
+    ) -> dict[int, repo.FeatureFrame] | None:
+        """The held frames with the new candles added, or None if a candle is missing between."""
+        step = TIMEFRAMES[timeframe]
+        out = {}
+        for asset_id in asset_ids:
+            old = held[asset_id]
+            new = newer.get(asset_id)
+            rows = None if new is None else new.frame[new.frame.index > old.frame.index[-1]]
+            if rows is None or rows.empty:
+                out[asset_id] = old
+                continue
+            joined = old.frame.index[-1:].append(rows.index)
+            if not ((joined[1:] - joined[:-1]) == step).all():
+                return None
+            out[asset_id] = repo.FeatureFrame(
+                pd.concat([old.frame, rows]).iloc[-limit:], new.last_close
+            )
+        return out
+
+
 def candle_frame(candles: list[Candle]) -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -138,6 +192,50 @@ def make_prediction(
     }
 
 
+async def warm_up(
+    session: AsyncSession, cache: ModelCache, frames: FrameCache, timeframes: list[str]
+) -> dict:
+    """Load the model files and the newest candles of these sizes before the first run needs
+    them. Downloading a file or reading 1,000 candles per coin takes seconds; a one-minute
+    signal should not wait for that."""
+    models = await active_models(session, timeframes)
+    errors = []
+    for path in dict.fromkeys(m.artifact_path for m in models):
+        try:
+            await cache.get(path)
+        except Exception as exc:
+            errors.append(f"{path}: {type(exc).__name__}: {exc}")
+    assets = await repo.list_assets(session)
+    btc_id = next(a.id for a in assets if a.symbol == "BTC")
+    for timeframe in dict.fromkeys(m.timeframe for m in models):
+        wanted = sorted({m.asset_id for m in models if m.timeframe == timeframe} | {btc_id})
+        await frames.get(session, wanted, timeframe, HISTORY)
+    return {"models": len(models), "errors": errors}
+
+
+# Every signal of one run is stored by one statement: the rows travel as one JSON document and
+# Postgres unpacks them (jsonb_to_recordset). "do nothing" on the unique key keeps a second
+# run from creating duplicates, and "returning" tells how many rows were really new.
+_INSERT_SIGNALS = text(
+    """
+    insert into predictions (asset_id, timeframe, base_open_time, target_open_time,
+      base_close, p_ml, p_up, label, sentiment_agg, sentiment_k, model_version_id,
+      features, feature_values, reasons)
+    select r.asset_id, r.timeframe, r.base_open_time, r.target_open_time, r.base_close,
+           r.p_ml, r.p_up, r.label, r.sentiment_agg, r.sentiment_k, r.model_version_id,
+           r.features, r.feature_values, r.reasons
+    from jsonb_to_recordset(cast(:rows as jsonb)) as r(
+      asset_id smallint, timeframe text, base_open_time timestamptz,
+      target_open_time timestamptz, base_close numeric, p_ml real, p_up real, label text,
+      sentiment_agg real, sentiment_k real, model_version_id integer, features jsonb,
+      feature_values real[], reasons jsonb)
+    on conflict (asset_id, timeframe, target_open_time) do nothing
+    returning id
+    """
+)
+PREDICT_PARALLEL = 4  # feature building and model calls running side by side
+
+
 async def run_predictions(
     session: AsyncSession,
     cache: ModelCache,
@@ -145,41 +243,61 @@ async def run_predictions(
     now: datetime,
     *,
     blend_k: float = 0.0,
+    frames: FrameCache | None = None,
 ) -> dict:
     """One prediction per active model for the candle that opens now. Idempotent: the unique
-    key (asset, timeframe, target candle) means a second run inserts nothing."""
-    created = skipped = 0
+    key (asset, timeframe, target candle) means a second run inserts nothing.
+
+    `frames` (the every-minute run passes one) keeps the candles between runs, so only the
+    new ones are read."""
+    skipped = 0
     errors: list[str] = []
     assets = await repo.list_assets(session)
     btc_id = next(a.id for a in assets if a.symbol == "BTC")
     symbols = [a.symbol for a in assets]
-    # News sentiment per coin, as of the moment the predicted candle opens (one lookup per
-    # target time: 1h, 4h and 1d candles that open together share it).
-    sentiments: dict[datetime, dict[str, float]] = {}
+    models = await active_models(session, timeframes)
+    # Load each model file once, before the coins are worked on side by side (a pooled model
+    # is one file for 16 coins). A file that cannot be loaded fails only its own coins.
+    broken: dict[str, Exception] = {}
+    for path in dict.fromkeys(m.artifact_path for m in models):
+        try:
+            await cache.get(path)
+        except Exception as exc:
+            broken[path] = exc
+
     # The candles of every coin of one size arrive in one query (Bitcoin included: it is the
     # market context of the others), instead of two queries per coin.
-    frames: dict[str, dict[int, repo.FeatureFrame]] = {}
-    models = await active_models(session, timeframes)
+    loaded: dict[str, dict[int, repo.FeatureFrame]] = {}
     for timeframe in dict.fromkeys(m.timeframe for m in models):
-        wanted = {m.asset_id for m in models if m.timeframe == timeframe} | {btc_id}
-        frames[timeframe] = await repo.feature_frames(session, sorted(wanted), timeframe, HISTORY)
-    for model in models:
+        wanted = sorted({m.asset_id for m in models if m.timeframe == timeframe} | {btc_id})
+        if frames is not None:
+            loaded[timeframe] = await frames.get(session, wanted, timeframe, HISTORY)
+        else:
+            loaded[timeframe] = await repo.feature_frames(session, wanted, timeframe, HISTORY)
+
+    # News sentiment per coin, as of the moment the predicted candle opens (one lookup per
+    # target time: candles of different sizes that open together share it).
+    sentiments: dict[datetime, dict[str, float]] = {}
+    gate = asyncio.Semaphore(PREDICT_PARALLEL)
+
+    async def predict(model: ActiveModel) -> dict | None:
+        """The row to store for one model, or None when there is nothing to predict from."""
+        if model.artifact_path in broken:
+            raise broken[model.artifact_path]
         expected = last_closed_open_time(now, model.timeframe)
-        own = frames[model.timeframe].get(model.asset_id)
+        own = loaded[model.timeframe].get(model.asset_id)
         if own is None or own.frame.index[-1] != expected:
-            skipped += 1  # the newest candle is missing: never predict from stale data
-            continue
+            return None  # the newest candle is missing: never predict from stale data
         target = expected + TIMEFRAMES[model.timeframe]
-        if target not in sentiments:
-            sentiments[target] = await sentiment_by_asset(session, symbols, target)
         sentiment = sentiments[target].get(model.symbol, 0.0)
-        try:
-            btc = None
-            if model.asset_id != btc_id:
-                btc_frame = frames[model.timeframe].get(btc_id)
-                btc = None if btc_frame is None else btc_frame.frame
-            bundle = await cache.get(model.artifact_path)
-            # pandas and XGBoost are CPU work: in a thread, so the event loop stays free.
+        btc = None
+        if model.asset_id != btc_id:
+            btc_frame = loaded[model.timeframe].get(btc_id)
+            btc = None if btc_frame is None else btc_frame.frame
+        bundle = await cache.get(model.artifact_path)
+        async with gate:
+            # pandas and XGBoost are CPU work: in threads, so the event loop stays free and
+            # several coins are worked on at the same time.
             result = await asyncio.to_thread(
                 make_prediction,
                 bundle,
@@ -189,44 +307,44 @@ async def run_predictions(
                 sentiment=sentiment,
                 blend_k=blend_k,
             )
-        except Exception as exc:  # one broken model must not block the others
-            errors.append(f"{model.symbol} {model.timeframe}: {type(exc).__name__}: {exc}")
-            continue
         if result is None:
-            skipped += 1
-            continue
+            return None
         features_json, feature_values = snapshot_columns(result["features"], model.feature_names)
-        inserted = await session.execute(
-            text(
-                """
-                insert into predictions (asset_id, timeframe, base_open_time, target_open_time,
-                  base_close, p_ml, p_up, label, sentiment_agg, sentiment_k, model_version_id,
-                  features, feature_values, reasons)
-                values (:asset_id, :tf, :base, :target, :base_close, :p_ml, :p_up, :label,
-                  :sentiment, :k, :model_id, cast(:features as jsonb),
-                  cast(:feature_values as real[]), cast(:reasons as jsonb))
-                on conflict (asset_id, timeframe, target_open_time) do nothing
-                returning id
-                """
-            ),
-            {
-                "asset_id": model.asset_id,
-                "tf": model.timeframe,
-                "base": expected,
-                "target": target,
-                "sentiment": sentiment,
-                "base_close": Decimal(own.last_close),
-                "p_ml": result["p_ml"],
-                "p_up": result["p_up"],
-                "label": result["label"],
-                "k": blend_k,
-                "model_id": model.id,
-                "features": features_json,
-                "feature_values": feature_values,
-                "reasons": json.dumps(result["reasons"]),
-            },
-        )
-        created += inserted.first() is not None
+        return {
+            "asset_id": model.asset_id,
+            "timeframe": model.timeframe,
+            "base_open_time": expected.isoformat(),
+            "target_open_time": target.isoformat(),
+            "base_close": format(Decimal(own.last_close), "f"),  # exact, never a float
+            "p_ml": result["p_ml"],
+            "p_up": result["p_up"],
+            "label": result["label"],
+            "sentiment_agg": sentiment,
+            "sentiment_k": blend_k,
+            "model_version_id": model.id,
+            "features": None if features_json is None else json.loads(features_json),
+            "feature_values": feature_values,
+            "reasons": result["reasons"],
+        }
+
+    for target in {
+        last_closed_open_time(now, m.timeframe) + TIMEFRAMES[m.timeframe] for m in models
+    }:
+        sentiments[target] = await sentiment_by_asset(session, symbols, target)
+    answers = await asyncio.gather(*(predict(m) for m in models), return_exceptions=True)
+
+    rows = []
+    for model, answer in zip(models, answers, strict=True):
+        if isinstance(answer, BaseException):  # one broken model must not block the others
+            errors.append(f"{model.symbol} {model.timeframe}: {type(answer).__name__}: {answer}")
+        elif answer is None:
+            skipped += 1
+        else:
+            rows.append(answer)
+    created = 0
+    if rows:
+        inserted = await session.execute(_INSERT_SIGNALS, {"rows": json.dumps(rows)})
+        created = len(inserted.all())
     return {"created": created, "skipped": skipped, "errors": errors}
 
 

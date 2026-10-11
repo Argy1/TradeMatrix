@@ -19,7 +19,7 @@ from app import db
 from app.config import Settings, get_settings
 from app.data.exchanges import ExchangeClient, get_exchange_client
 from app.data.news import NewsSource, get_news_sources, news_http
-from app.ml.predict import ModelCache
+from app.ml.predict import FrameCache, ModelCache
 from app.ml.storage import ModelStorage
 from app.observability import init_sentry
 from app.sentiment.gemini import GeminiScorer
@@ -36,6 +36,7 @@ from app.worker.jobs import (
     run_job,
     sentiment_job,
     summary_job,
+    warm_up_job,
 )
 
 
@@ -45,6 +46,7 @@ def build_scheduler(
     cache: ModelCache,
     sources: Sequence[NewsSource],
     scorer: Scorer | None,
+    frames: FrameCache | None = None,
 ) -> AsyncIOScheduler:
     """Every job with its schedule, not started yet. Kept apart from `main` so a test can
     check the wiring (job names, times, arguments) without starting a worker."""
@@ -60,13 +62,14 @@ def build_scheduler(
         coalesce=True,  # after a pause, run once instead of once per missed hour
         misfire_grace_time=600,
     )
-    # Two seconds after every minute, when a 1m candle (and at :00, :05, ... the larger fast
-    # sizes) has just closed. A fast signal is only useful right away: if the run cannot start
-    # within 20 seconds it is dropped, never queued behind the next one.
+    # One second after every minute, when a 1m candle (and at :00, :05, ... the larger fast
+    # sizes) has just closed. If the exchange does not serve the new candle yet, that request
+    # is repeated once a second later. A fast signal is only useful right away: if the run
+    # cannot start within 20 seconds it is dropped, never queued behind the next one.
     scheduler.add_job(
         fast_close,
-        CronTrigger(second=2, timezone="UTC"),
-        args=[client, cache, k],
+        CronTrigger(second=1, timezone="UTC"),
+        args=[client, cache, k, frames or FrameCache()],
         id="fast_close",
         max_instances=1,
         coalesce=True,
@@ -176,8 +179,12 @@ async def main() -> None:
     # Catch up first: load every candle missed while the worker was down, predict the newest
     # candles (skipped if already done), and resolve finished predictions.
     await candle_close(client, cache, settings.sentiment_blend_k, list(TIMEFRAMES))
+    # Then the fast sizes' model files and candles into memory, so the first every-minute run
+    # is as quick as all the later ones.
+    frames = FrameCache()
+    await run_job("warm_up", warm_up_job(cache, frames))
 
-    scheduler = build_scheduler(settings, client, cache, get_news_sources(feeds), scorer)
+    scheduler = build_scheduler(settings, client, cache, get_news_sources(feeds), scorer, frames)
     scheduler.start()
     log("worker_started", jobs=[job.id for job in scheduler.get_jobs()])
 

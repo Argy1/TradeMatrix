@@ -77,6 +77,17 @@ async def upsert_candles(
     The primary key (asset_id, timeframe, open_time) makes this idempotent: running it
     twice with the same candles leaves exactly one row per candle.
     """
+    return await upsert_many(session, [(asset_id, timeframe, candles)])
+
+
+async def upsert_many(
+    session: AsyncSession, batches: Sequence[tuple[int, str, Sequence[Candle]]]
+) -> int:
+    """`upsert_candles` for several coins and sizes in one go: (asset id, size, candles) each.
+
+    All rows travel together, so the every-minute run needs one trip to the database for its
+    16 coins instead of 16.
+    """
     rows = [
         {
             "asset_id": asset_id,
@@ -90,6 +101,7 @@ async def upsert_candles(
             "trades": c.trades,
             "taker_buy_volume": c.taker_buy_volume,
         }
+        for asset_id, timeframe, candles in batches
         for c in candles
     ]
     for start in range(0, len(rows), UPSERT_CHUNK):
@@ -138,9 +150,14 @@ class FeatureFrame:
 
 
 async def feature_frames(
-    session: AsyncSession, asset_ids: Sequence[int], timeframe: str, limit: int
+    session: AsyncSession,
+    asset_ids: Sequence[int],
+    timeframe: str,
+    limit: int,
+    after: datetime | None = None,
 ) -> dict[int, FeatureFrame]:
     """The newest `limit` candles of several coins in one query (oldest first per coin).
+    With `after`, only candles that opened later than that (a coin without any is left out).
 
     The every-minute run predicts 16 coins at once; one query instead of two per coin keeps it
     inside a few seconds. Prices come back as floats because they only feed the model here;
@@ -157,12 +174,13 @@ async def feature_frames(
                 cross join lateral (
                   select * from candles
                   where asset_id = a.id and timeframe = :timeframe
+                    and (cast(:after as timestamptz) is null or open_time > :after)
                   order by open_time desc limit :limit
                 ) c
                 order by c.asset_id, c.open_time
                 """
             ),
-            {"asset_ids": list(asset_ids), "timeframe": timeframe, "limit": limit},
+            {"asset_ids": list(asset_ids), "timeframe": timeframe, "limit": limit, "after": after},
         )
     ).all()
     columns = ["open", "high", "low", "close", "volume", "trades", "taker_buy_volume"]

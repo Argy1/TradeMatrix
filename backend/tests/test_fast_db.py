@@ -148,7 +148,8 @@ async def test_feature_frames_reads_many_coins_at_once(session: AsyncSession) ->
     assert own.frame["trades"].tolist() == [22.0, 23.0, 24.0, 25.0]
     assert own.frame["close"].iloc[-1] == 105.5 and own.last_close == Decimal("105.5")
     assert own.frame.dtypes.eq("float64").all()
-    assert len(frames[eth.id].frame) == 2
+    # (after go-live ETH also has real 30m candles; the two made-up ones are the newest)
+    assert list(frames[eth.id].frame.index[-2:]) == [far, far + step]
 
 
 async def test_a_flat_candle_has_no_result_on_fast_sizes_only(session: AsyncSession) -> None:

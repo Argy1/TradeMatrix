@@ -5,14 +5,16 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import httpx
+import pandas as pd
 import pytest
 
 from app.alerts.rules import Signal, signal_notification
-from app.data import ingest
+from app.data import ingest, repo
 from app.data.exchanges.base import Candle, ExchangeClient, ExchangeError
 from app.data.exchanges.binance import BinanceClient
 from app.data.repo import Asset
 from app.ml.performance import Resolved, Totals, from_totals, performance, totals_of
+from app.ml.predict import FrameCache
 from app.ml.reasons import build_reasons
 from app.timeframes import TIMEFRAMES, interval_case_sql, stale_grace, timeframe_words
 
@@ -57,7 +59,11 @@ class Exchange(ExchangeClient):
 @pytest.fixture
 def table(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Stands in for the candles table: the key is the primary key."""
-    rows: dict[tuple[int, str, datetime], Candle] = {}
+
+    class Table(dict):
+        trips: list[int]
+
+    rows: dict[tuple[int, str, datetime], Candle] = Table()
 
     async def latest_open_times(_session, timeframes):
         found = {}
@@ -67,13 +73,18 @@ def table(monkeypatch: pytest.MonkeyPatch) -> dict:
                 found[(asset.id, tf)] = max(times) if times else None
         return found
 
-    async def upsert_candles(_session, asset_id, timeframe, candles):
-        for c in candles:
-            rows[(asset_id, timeframe, c.open_time)] = c
-        return len(candles)
+    trips: list[int] = []
+
+    async def upsert_many(_session, batches):
+        trips.append(len(batches))
+        for asset_id, timeframe, candles in batches:
+            for c in candles:
+                rows[(asset_id, timeframe, c.open_time)] = c
+        return sum(len(candles) for _, _, candles in batches)
 
     monkeypatch.setattr(ingest.repo, "latest_open_times", latest_open_times)
-    monkeypatch.setattr(ingest.repo, "upsert_candles", upsert_candles)
+    monkeypatch.setattr(ingest.repo, "upsert_many", upsert_many)
+    rows.trips = trips  # how many times the "database" was written to
     return rows
 
 
@@ -94,8 +105,9 @@ async def test_all_coins_are_read_in_one_go_and_only_what_is_missing(table: dict
         table[(asset.id, "5m", at(11, 55))] = candle(at(11, 55))
     exchange = Exchange(NEWEST)
     result = await ingest.ingest_many(None, exchange, [BTC, ETH, SOL], ["1m", "5m"], now=NOW)
-    assert result == {"timeframes": ["1m", "5m"], "stored": 6, "errors": []}
+    assert result == {"timeframes": ["1m", "5m"], "stored": 6, "retried": 0, "errors": []}
     assert len(exchange.requests) == 6  # one per coin and size
+    assert table.trips == [6]  # all six batches stored in ONE trip to the database
     assert {start for _, tf, start in exchange.requests if tf == "1m"} == {at(12, 4)}
     assert table[(2, "5m", at(12, 0))].trades == 40  # order flow is stored with the candle
 
@@ -124,7 +136,7 @@ async def test_a_candle_that_is_not_served_yet_is_asked_for_once_more(table: dic
         waits.append(seconds)
 
     result = await ingest.ingest_many(None, exchange, [BTC, SOL], ["1m"], now=NOW, sleep=sleep)
-    assert result["stored"] == 2 and result["errors"] == []
+    assert result["stored"] == 2 and result["errors"] == [] and result["retried"] == 1
     assert waits == [ingest.RETRY_AFTER]  # only the late coin waited, and only once
     assert [s for s, _, _ in exchange.requests].count("SOLUSDT") == 2
 
@@ -249,3 +261,67 @@ def test_order_flow_is_a_reason_when_one_side_was_clearly_more_active() -> None:
         r["code"] != "order_flow"
         for r in build_reasons(FEATURES | {"taker_share_20": None}, importances)
     )
+
+
+# ---------------------------------------------------------------- candles kept between runs
+def frame(start_minute: int, count: int, last_close: str = "100") -> repo.FeatureFrame:
+    index = pd.DatetimeIndex(
+        [at(12, 0) + timedelta(minutes=start_minute + i) for i in range(count)]
+    )
+    values = {name: [float(start_minute + i) for i in range(count)] for name in FRAME_COLUMNS}
+    return repo.FeatureFrame(pd.DataFrame(values, index=index), Decimal(last_close))
+
+
+FRAME_COLUMNS = ["open", "high", "low", "close", "volume", "trades", "taker_buy_volume"]
+
+
+async def test_candles_are_read_in_full_once_and_then_only_the_new_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stored = {1: 10, 2: 10}  # asset id -> how many one-minute candles the "database" has
+    reads: list[datetime | None] = []
+
+    async def feature_frames(_session, asset_ids, timeframe, limit, after=None):
+        reads.append(after)
+        out = {}
+        for asset_id in asset_ids:
+            full = frame(0, stored[asset_id], last_close=str(100 + stored[asset_id]))
+            rows = full.frame if after is None else full.frame[full.frame.index > after]
+            if len(rows):
+                out[asset_id] = repo.FeatureFrame(rows.iloc[-limit:], full.last_close)
+        return out
+
+    monkeypatch.setattr(repo, "feature_frames", feature_frames)
+    cache = FrameCache()
+
+    first = await cache.get(None, [1, 2], "1m", 8)
+    assert reads == [None] and len(first[1].frame) == 8  # everything, cut to the limit
+
+    stored.update({1: 11, 2: 11})  # one more minute closed
+    second = await cache.get(None, [1, 2], "1m", 8)
+    assert reads[-1] == at(12, 9)  # asked only for candles after the newest one it holds
+    assert len(second[1].frame) == 8 and second[1].frame.index[-1] == at(12, 10)
+    assert second[1].last_close == Decimal("111")
+    full = (await feature_frames(None, [1], "1m", 8))[1].frame
+    pd.testing.assert_frame_equal(second[1].frame, full)  # the same as a full read
+
+    # Nothing new: the held candles are returned as they are.
+    third = await cache.get(None, [1, 2], "1m", 8)
+    assert third[1].frame.index[-1] == at(12, 10) and third[2].last_close == Decimal("111")
+
+    # A candle is missing between what is held and what is new: read everything again.
+    async def with_a_gap(_session, asset_ids, timeframe, limit, after=None):
+        reads.append(after)
+        if after is None:
+            return {asset_id: frame(0, 14) for asset_id in asset_ids}
+        return {asset_id: frame(12, 2) for asset_id in asset_ids}  # minute 11 is missing
+
+    monkeypatch.setattr(repo, "feature_frames", with_a_gap)
+    before = len(reads)
+    fourth = await cache.get(None, [1, 2], "1m", 8)
+    assert reads[before:] == [at(12, 10), None]  # tried the short read, then the full one
+    assert fourth[1].frame.index[-1] == at(12, 13)
+
+    # A coin that is not held yet also means a full read.
+    await cache.get(None, [1, 2, 3], "1m", 8)
+    assert reads[-1] is None

@@ -4,11 +4,11 @@ Model settings: `fast_flow_pooled` (chosen on test folds before 2026-06-01 only,
 
 Out-of-sample period: 2026-06-04 to 2026-10-08, 18 walk-forward folds, 60091 predictions. Neutral band 0.45-0.55.
 
-**Verdict:** The model beats the simple rules, and the 95% interval of the edge stays above zero.
+**Verdict:** The model does NOT beat the baselines with a margin that survives the bootstrap check. Treat its signals as no better than the simple rules below.
 
 | Measure | Model | Baseline |
 | --- | --- | --- |
-| Accuracy of Up/Down calls | 53.9% | naive 49.0%, always-up 50.1%, always-down 49.9% |
+| Accuracy of Up/Down calls | 53.9% | naive 49.0%, reverse 51.0%, always-up 50.1%, always-down 49.9% |
 | Flat candles (close equal to the previous close) | 0.6% | |
 | Coverage (share of non-neutral calls) | 7.8% | 100% |
 | Brier score (lower is better) | 0.2496 | base rate 0.2500 |
@@ -18,7 +18,7 @@ Out-of-sample period: 2026-06-04 to 2026-10-08, 18 walk-forward folds, 60091 pre
 
 Bootstrap over folds (mean, 95% interval):
 - Accuracy minus naive: 4.26% (2.01% to 6.41%)
-- Accuracy minus the best simple rule: 2.61% (0.21% to 4.79%)
+- Accuracy minus the best simple rule: 1.93% (-0.64% to 4.18%)
 - Brier improvement over base rate: 0.00039 (0.00017 to 0.00061)
 
 ## Simulated long-only strategy (0.1% fee + 0.05% slippage per trade, per coin average)

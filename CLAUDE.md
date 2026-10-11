@@ -6,7 +6,7 @@
 
 **TradeMatrix AI** is a crypto market-signal product with a **web app (Next.js)** and a **mobile app (Flutter)** that share **one backend (FastAPI, hosted on Railway)** and **one database (Supabase)**.
 
-For each supported coin and timeframe the apps show a live candlestick chart and a **signal: Up / Down / Neutral with a probability**, plus the reasons behind it. The signal blends three things:
+For each supported coin and timeframe (1m, 3m, 5m, 15m, 30m, 1h, 4h, 1d) the apps show a live candlestick chart and a **signal: Up / Down / Neutral with a probability**, plus the reasons behind it. The signal blends three things:
 
 1. Technical indicators (RSI, MACD, EMAs, Bollinger Bands, ATR, volume).
 2. A machine-learning model (XGBoost) that outputs the probability the next candle closes higher.
@@ -26,13 +26,13 @@ Brand: the product name is **TradeMatrix AI** and the line **"Created by Argy"**
 
 ## Non-negotiable rules
 
-1. **Honest about prediction.** Never hard-code or claim an accuracy figure. Every signal screen shows the disclaimer (docs/06). The track-record page always shows the naive baseline next to the model's accuracy.
+1. **Honest about prediction.** Never hard-code or claim an accuracy figure. Every signal screen shows the disclaimer (docs/06). The track-record page always shows the simple rules (repeat the last candle, reverse it, always Up, always Down) next to the model's accuracy, and the model is compared with the best of them. Accurate is not the same as useful: on short candles a model can be right often and still lose to fees; say so.
 2. **No data leakage.** Features at time `t` use only candles that were closed at `t`. Split data by time, never randomly. Walk-forward validation only.
 3. **No trading.** v1 never executes trades and never stores exchange API keys.
 4. **Secrets stay secret.** Never commit `.env*` files (except `.env.example`). The Gemini key and the Supabase service-role key exist only on the server (Railway), never in the web or mobile apps.
 5. **Clients are thin.** Web and mobile never compute indicators or probabilities. They only draw what the API returns.
 6. **Gemini is called only from the backend worker**, with a JSON schema, temperature 0, and validated output.
-7. **Every prediction is auditable:** store `model_version_id`, the feature snapshot (values in `predictions.feature_values`, their names once in `model_versions.feature_names`; older rows keep the `features` JSON) and the sentiment value used.
+7. **Every prediction is auditable:** store `model_version_id`, the feature snapshot (values in `predictions.feature_values`, their names once in `model_versions.feature_names`; older rows keep the `features` JSON) and the sentiment value used. Signals of the fast sizes (under 1h) keep this for 90 days; after that only their daily counts remain (`signal_stats_daily`, approved by Argy on 2026-10-11).
 8. **Jobs are idempotent.** Re-running a job must never create duplicate rows (use unique constraints and upserts).
 9. **Signals must be easy to understand:** direction word + icon + probability + plain sentence + reasons + reliability vs baseline, always together (docs/08). Never convey direction by color alone.
 10. **Stay in v1 scope** (docs/01). Do not add features, markets or paid plans without asking.
@@ -83,6 +83,9 @@ TradeMatrix/
 - Database: `npx supabase db push` (apply `supabase/migrations`). The Supabase CLI runs through `npx`, there is no global install. While the CLI is logged in to a different Supabase account, apply migrations through the Supabase connector or with `npx supabase db push --db-url <session pooler URL>`.
 - Gate 0 check: `uv run scripts/gate0_check.py` (from the repo root; reads the root `.env`)
 - Models (from backend/): `uv run python -m app.ml.tune` (choose settings on 2021-2024) / `uv run python -m app.ml.backtest` (evaluate) / `uv run python -m app.ml.train_models` (train, store, activate). Then redeploy `worker` so it loads the new files.
+- Fast sizes (from backend/): `uv run python -m app.data.history` downloads or extends the history files in `backend/data/history/` (git-ignored, about 540 MB); `uv run python -m app.ml.tune 1m,3m,5m,15m,30m`, `uv run python -m app.ml.backtest --timeframes 1m,3m,5m,15m,30m` and `uv run python -m app.ml.train_models --timeframes 1m,3m,5m,15m,30m` read those files. Retrain: history, train_models, redeploy `worker`.
+- Daily counts (from backend/): `uv run python -m app.ml.stats --since 2026-10-01` rebuilds `signal_stats_daily`, which the track record reads. The worker keeps it fresh by itself.
+- Rehearsal (from backend/): `uv run python -m app.worker.rehearsal --minutes 30` runs the every-minute pipeline against the real database and rolls every minute back.
 - Audit snapshots (from backend/): `uv run python -m app.ml.snapshots` stores the feature names of older models and converts older signals to the compact form, with a check; `--clear-json` removes the converted JSON afterwards. Read a snapshot with `select * from prediction_features where prediction_id = ...`.
 - Python: `uv` manages Python 3.12 (the system Python is 3.14 and is not used).
 

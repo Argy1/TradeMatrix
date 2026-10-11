@@ -83,7 +83,7 @@ def test_scheduler_has_every_job_at_its_time() -> None:
         return times
 
     assert fires("candle_close", 2) == ["12:00:05", "13:00:05"]  # 5 s after each hourly close
-    assert fires("fast_close", 3) == ["12:00:02", "12:01:02", "12:02:02"]  # every minute
+    assert fires("fast_close", 3) == ["12:00:01", "12:01:01", "12:02:01"]  # every minute
     assert jobs["fast_close"].misfire_grace_time == 20  # a late fast run is dropped
     assert fires("summarize_signals", 2) == ["12:10:40", "13:10:40"]
     # Once a day: recount the week, then delete what is past its keep time (90 days).

@@ -79,8 +79,10 @@ async def ingest_many(
     now = now or datetime.now(UTC)
     latest = await repo.latest_open_times(session, timeframes)
     gate = asyncio.Semaphore(FETCH_PARALLEL)
+    retried = 0
 
     async def fetch(asset: repo.Asset, timeframe: str) -> list:
+        nonlocal retried
         newest_closed = last_closed_open_time(now, timeframe)
         start = first_missing(latest.get((asset.id, timeframe)), timeframe, now)
         if start > newest_closed:
@@ -88,21 +90,26 @@ async def ingest_many(
         async with gate:
             candles = await client.get_klines(asset.exchange_symbol, timeframe, start=start)
             if not candles or candles[-1].open_time < newest_closed:
+                retried += 1
                 await sleep(RETRY_AFTER)
                 candles = await client.get_klines(asset.exchange_symbol, timeframe, start=start)
         return candles
 
     pairs = [(asset, timeframe) for asset in assets for timeframe in timeframes]
     answers = await asyncio.gather(*(fetch(a, tf) for a, tf in pairs), return_exceptions=True)
-    stored, errors = 0, []
+    batches, errors = [], []
     for (asset, timeframe), answer in zip(pairs, answers, strict=True):
         if isinstance(answer, BaseException):
             errors.append(f"{asset.symbol} {timeframe}: {type(answer).__name__}: {answer}")
-            continue
-        stored += await repo.upsert_candles(
-            session, asset.id, timeframe, valid_candles(answer, timeframe)
-        )
-    return {"timeframes": list(timeframes), "stored": stored, "errors": errors}
+        elif answer:
+            batches.append((asset.id, timeframe, valid_candles(answer, timeframe)))
+    stored = await repo.upsert_many(session, batches)  # one trip to the database for all coins
+    return {
+        "timeframes": list(timeframes),
+        "stored": stored,
+        "retried": retried,
+        "errors": errors,
+    }
 
 
 async def extend_history(
