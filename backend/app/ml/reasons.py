@@ -137,6 +137,21 @@ def _candidates(
         )
     )
 
+    taker = f.get("taker_share_20")
+    if taker is not None and taker == taker:  # only the fast models have it (NaN != NaN)
+        buyers = taker >= 0.5
+        share = taker if buyers else 1 - taker
+        out.append(
+            (
+                "order_flow",
+                f"{'Buyers' if buyers else 'Sellers'} were the more active side: "
+                f"{share:.0%} of the volume over the last 20 candles",
+                "none" if share < 0.52 else "up" if buyers else "down",
+                abs(taker - 0.5) * 20,
+                "taker_share_20",
+            )
+        )
+
     if sentiment:
         out.append(
             (

@@ -1,5 +1,6 @@
 """Live predictions (run_predictions) and their outcomes (resolve_outcomes)."""
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -108,7 +109,9 @@ def make_prediction(
     blend_k: float = 0.0,
 ) -> dict | None:
     """Prediction for the candle after the last row of `candles`, or None if history is short."""
-    features = build_features(candles, btc)
+    # A fast model was trained with extra switches (order flow, quiet stretches); files
+    # saved before those existed have none, which means "the plain features".
+    features = build_features(candles, btc, **(getattr(bundle, "feature_options", None) or {}))
     if bundle.symbol == "ALL":
         features["asset_id"] = float(asset_id)
     # Same columns as in training. In the pooled 1d model, BTC's own rows had no BTC-context
@@ -153,10 +156,17 @@ async def run_predictions(
     # News sentiment per coin, as of the moment the predicted candle opens (one lookup per
     # target time: 1h, 4h and 1d candles that open together share it).
     sentiments: dict[datetime, dict[str, float]] = {}
-    for model in await active_models(session, timeframes):
+    # The candles of every coin of one size arrive in one query (Bitcoin included: it is the
+    # market context of the others), instead of two queries per coin.
+    frames: dict[str, dict[int, repo.FeatureFrame]] = {}
+    models = await active_models(session, timeframes)
+    for timeframe in dict.fromkeys(m.timeframe for m in models):
+        wanted = {m.asset_id for m in models if m.timeframe == timeframe} | {btc_id}
+        frames[timeframe] = await repo.feature_frames(session, sorted(wanted), timeframe, HISTORY)
+    for model in models:
         expected = last_closed_open_time(now, model.timeframe)
-        candles = await repo.fetch_candles(session, model.asset_id, model.timeframe, HISTORY)
-        if not candles or candles[-1].open_time != expected:
+        own = frames[model.timeframe].get(model.asset_id)
+        if own is None or own.frame.index[-1] != expected:
             skipped += 1  # the newest candle is missing: never predict from stale data
             continue
         target = expected + TIMEFRAMES[model.timeframe]
@@ -166,13 +176,14 @@ async def run_predictions(
         try:
             btc = None
             if model.asset_id != btc_id:
-                btc = candle_frame(
-                    await repo.fetch_candles(session, btc_id, model.timeframe, HISTORY)
-                )
+                btc_frame = frames[model.timeframe].get(btc_id)
+                btc = None if btc_frame is None else btc_frame.frame
             bundle = await cache.get(model.artifact_path)
-            result = make_prediction(
+            # pandas and XGBoost are CPU work: in a thread, so the event loop stays free.
+            result = await asyncio.to_thread(
+                make_prediction,
                 bundle,
-                candle_frame(candles),
+                own.frame,
                 btc,
                 model.asset_id,
                 sentiment=sentiment,
@@ -204,7 +215,7 @@ async def run_predictions(
                 "base": expected,
                 "target": target,
                 "sentiment": sentiment,
-                "base_close": Decimal(candles[-1].close),
+                "base_close": Decimal(own.last_close),
                 "p_ml": result["p_ml"],
                 "p_up": result["p_up"],
                 "label": result["label"],

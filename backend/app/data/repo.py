@@ -7,7 +7,9 @@ Values always travel as parameters (:name), never by string formatting.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
+import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,11 +57,14 @@ async def get_asset(session: AsyncSession, symbol: str) -> Asset | None:
 
 _UPSERT = text(
     """
-    insert into candles (asset_id, timeframe, open_time, open, high, low, close, volume)
-    values (:asset_id, :timeframe, :open_time, :open, :high, :low, :close, :volume)
+    insert into candles (asset_id, timeframe, open_time, open, high, low, close, volume,
+                         trades, taker_buy_volume)
+    values (:asset_id, :timeframe, :open_time, :open, :high, :low, :close, :volume,
+            :trades, :taker_buy_volume)
     on conflict (asset_id, timeframe, open_time) do update
     set open = excluded.open, high = excluded.high, low = excluded.low,
-        close = excluded.close, volume = excluded.volume
+        close = excluded.close, volume = excluded.volume,
+        trades = excluded.trades, taker_buy_volume = excluded.taker_buy_volume
     """
 )
 
@@ -82,6 +87,8 @@ async def upsert_candles(
             "low": c.low,
             "close": c.close,
             "volume": c.volume,
+            "trades": c.trades,
+            "taker_buy_volume": c.taker_buy_volume,
         }
         for c in candles
     ]
@@ -100,6 +107,80 @@ async def latest_open_time(session: AsyncSession, asset_id: int, timeframe: str)
             {"asset_id": asset_id, "timeframe": timeframe},
         )
     ).scalar_one()
+
+
+async def latest_open_times(
+    session: AsyncSession, timeframes: Sequence[str]
+) -> dict[tuple[int, str], datetime | None]:
+    """Newest stored candle per (asset id, size) for every active coin, in one query."""
+    rows = await session.execute(
+        text(
+            """
+            select a.id, tf.timeframe,
+                   (select max(open_time) from candles c
+                    where c.asset_id = a.id and c.timeframe = tf.timeframe)
+            from assets a
+            cross join unnest(cast(:timeframes as text[])) as tf(timeframe)
+            where a.active
+            """
+        ),
+        {"timeframes": list(timeframes)},
+    )
+    return {(row[0], row[1]): row[2] for row in rows}
+
+
+@dataclass(frozen=True)
+class FeatureFrame:
+    """The newest candles of one coin as numbers for the model, plus the exact last close."""
+
+    frame: pd.DataFrame  # open, high, low, close, volume, trades, taker_buy_volume by open time
+    last_close: Decimal
+
+
+async def feature_frames(
+    session: AsyncSession, asset_ids: Sequence[int], timeframe: str, limit: int
+) -> dict[int, FeatureFrame]:
+    """The newest `limit` candles of several coins in one query (oldest first per coin).
+
+    The every-minute run predicts 16 coins at once; one query instead of two per coin keeps it
+    inside a few seconds. Prices come back as floats because they only feed the model here;
+    the one price that is stored again (the last close) also comes back exact.
+    """
+    rows = (
+        await session.execute(
+            text(
+                """
+                select c.asset_id, c.open_time,
+                       c.open::float8, c.high::float8, c.low::float8, c.close::float8,
+                       c.volume::float8, c.trades::float8, c.taker_buy_volume::float8, c.close
+                from unnest(cast(:asset_ids as smallint[])) as a(id)
+                cross join lateral (
+                  select * from candles
+                  where asset_id = a.id and timeframe = :timeframe
+                  order by open_time desc limit :limit
+                ) c
+                order by c.asset_id, c.open_time
+                """
+            ),
+            {"asset_ids": list(asset_ids), "timeframe": timeframe, "limit": limit},
+        )
+    ).all()
+    columns = ["open", "high", "low", "close", "volume", "trades", "taker_buy_volume"]
+    by_asset: dict[int, list] = {}
+    for row in rows:
+        by_asset.setdefault(row[0], []).append(row)
+    return {
+        asset_id: FeatureFrame(
+            pd.DataFrame(
+                [r[2:9] for r in group],
+                columns=columns,
+                index=pd.DatetimeIndex([r[1] for r in group]),
+                dtype="float64",
+            ),
+            group[-1][9],
+        )
+        for asset_id, group in by_asset.items()
+    }
 
 
 async def earliest_open_time(

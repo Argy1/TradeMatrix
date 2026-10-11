@@ -24,9 +24,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import db
 from app.config import get_settings
 from app.data import repo
-from app.features.build import feature_columns
-from app.ml.backtest import active_symbols, load_jobs, run_walk_forward, summarize
-from app.ml.config import EMBARGO, EVAL_FROM, ModelConfig, chosen
+from app.features.build import feature_columns, labelled
+from app.ml.backtest import (
+    active_symbols,
+    load_jobs,
+    run_walk_forward,
+    summarize,
+    summarize_coins,
+)
+from app.ml.config import EMBARGO, ModelConfig, chosen, eval_from, is_fast
 from app.ml.storage import ModelStorage
 from app.ml.train import CalibratedModel, fit_calibrated
 
@@ -42,6 +48,9 @@ class ModelBundle:
     train_start: datetime
     train_end: datetime
     trained_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # How build_features was called in training; the worker calls it the same way. Empty for
+    # the slow models and for files saved before the fast sizes existed.
+    feature_options: dict = field(default_factory=dict)
 
     def importances(self) -> dict[str, float]:
         return self.model.importances()
@@ -71,7 +80,8 @@ def train_final(
     train_start = 0 if config.expanding else max(0, train_end - config.windows["train"])
 
     def rows(lo: int, hi: int) -> pd.DataFrame:
-        return data[(position >= lo) & (position < hi)]
+        # Only rows with a result: on the fast sizes a flat next candle has none.
+        return labelled(data[(position >= lo) & (position < hi)])
 
     model = fit_calibrated(
         rows(train_start, train_end),
@@ -96,16 +106,17 @@ def _clean(value: object) -> object:
     return value
 
 
-def evaluation_metrics(summary: dict, config: ModelConfig) -> dict:
+def evaluation_metrics(summary: dict, config: ModelConfig, timeframe: str) -> dict:
     """The numbers stored on model_versions.metrics and shown on the track-record page."""
     return _clean(
         {
             "config": config.name,
-            "evaluation_from": EVAL_FROM.isoformat(),
+            "evaluation_from": eval_from(timeframe).isoformat(),
             "folds": len(summary["folds"]),
             "model": summary["model"],
             "baselines": summary["baselines"],
             "accuracy_edge_vs_naive": list(summary["accuracy_edge_vs_naive"]),
+            "accuracy_edge_vs_best": list(summary["accuracy_edge_vs_best"]),
             "brier_edge_vs_base_rate": list(summary["brier_edge_vs_base_rate"]),
             "beats_baselines": bool(summary["beats_baselines"]),
             "top_features": summary["importances"].head(8).round(3).to_dict(),
@@ -178,26 +189,39 @@ async def run(timeframes: list[str], symbols: list[str] | None = None) -> None:
         for timeframe in timeframes:
             config = chosen(timeframe)
             everyone = await active_symbols()
-            chosen_symbols = everyone if timeframe == "1d" else (symbols or everyone)
-            for name, data in await load_jobs(chosen_symbols, timeframe):
+            pooled = timeframe == "1d" or config.pooled  # a pooled model always uses every coin
+            chosen_symbols = everyone if pooled else (symbols or everyone)
+            for name, data in await load_jobs(chosen_symbols, timeframe, config):
                 preds, folds = await asyncio.to_thread(
-                    run_walk_forward, data, timeframe, config, EVAL_FROM
+                    run_walk_forward, data, timeframe, config, eval_from(timeframe)
                 )
-                metrics = evaluation_metrics(summarize(preds, folds, timeframe), config)
                 model, start, end = await asyncio.to_thread(train_final, data, config)
-                bundle = ModelBundle(model, name, timeframe, config.name, start, end)
+                bundle = ModelBundle(
+                    model, name, timeframe, config.name, start, end,
+                    feature_options=config.feature_options,
+                )  # fmt: skip
                 path = f"{name}/{timeframe}/{bundle.trained_at:%Y%m%dT%H%M%SZ}.joblib"
                 await storage.upload(path, to_bytes(bundle))
-                asset_ids = list(assets.values()) if name == "ALL" else [assets[name]]
-                async with factory() as session, session.begin():
-                    ids = await register(
-                        session, asset_ids, timeframe, path, metrics, start, end, model.features
+                if name == "ALL" and is_fast(timeframe):
+                    # One file for all coins, but every coin is judged on its own predictions,
+                    # so "ok" or "degraded" is honest coin by coin.
+                    scored = summarize_coins(preds, timeframe, assets)
+                    groups = [([assets[coin]], summary, coin) for coin, summary in scored.items()]
+                else:
+                    asset_ids = list(assets.values()) if name == "ALL" else [assets[name]]
+                    groups = [(asset_ids, summarize(preds, folds, timeframe), name)]
+                for asset_ids, summary, label in groups:
+                    metrics = evaluation_metrics(summary, config, timeframe)
+                    async with factory() as session, session.begin():
+                        ids = await register(
+                            session, asset_ids, timeframe, path, metrics, start, end, model.features
+                        )
+                    print(
+                        f"{label:5} {timeframe:3} config={config.name} "
+                        f"status={'ok' if metrics['beats_baselines'] else 'degraded'} "
+                        f"trained {start:%Y-%m-%d}..{end:%Y-%m-%d} -> {path} (versions {ids})",
+                        flush=True,
                     )
-                print(
-                    f"{name:4} {timeframe:3} config={config.name} "
-                    f"status={'ok' if metrics['beats_baselines'] else 'degraded'} "
-                    f"trained {start:%Y-%m-%d}..{end:%Y-%m-%d} -> {path} (model_versions {ids})"
-                )
     finally:
         await storage.aclose()
         engine = db.get_engine()

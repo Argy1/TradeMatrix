@@ -1,6 +1,7 @@
 """Binance public market-data client (no API key, read-only endpoints)."""
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -14,6 +15,7 @@ from app.timeframes import TIMEFRAMES
 MAX_PAGE = 1000  # Binance returns at most 1000 klines per request
 DEFAULT_LATEST = 500
 MAX_RETRY_DELAY = 60.0  # seconds; a longer wait means something is wrong, so we stop instead
+CLOCK_TTL = 30.0  # seconds between two questions for the exchange's time
 
 
 def _to_ms(moment: datetime) -> int:
@@ -59,6 +61,8 @@ class BinanceClient(ExchangeClient):
         self._sleep = sleep  # injectable so tests do not really wait
         self._max_retries = max_retries
         self._page_pause = page_pause
+        self._clock_offset_ms: int | None = None  # exchange clock minus our clock
+        self._clock_asked = 0.0
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -93,9 +97,19 @@ class BinanceClient(ExchangeClient):
         raise ExchangeError(f"{self.name}: no response from {path}")  # pragma: no cover
 
     async def _server_time_ms(self) -> int:
-        # We compare candle close times with the exchange's clock, not ours, so a wrong
-        # local clock can never make an open candle look closed.
-        return int((await self._get("/api/v3/time"))["serverTime"])
+        """The exchange's clock. We compare candle close times with it, not with ours, so a
+        wrong local clock can never make an open candle look closed.
+
+        Asking costs a request, and the every-minute run reads 16 coins at once, so the
+        difference between the two clocks is remembered for 30 seconds. It is measured after
+        the answer arrived, which makes the estimate a little behind the real exchange time,
+        never ahead: a candle can be seen as closed slightly late, never early.
+        """
+        if self._clock_offset_ms is None or time.monotonic() - self._clock_asked > CLOCK_TTL:
+            server_ms = int((await self._get("/api/v3/time"))["serverTime"])
+            self._clock_offset_ms = server_ms - int(time.time() * 1000)
+            self._clock_asked = time.monotonic()
+        return int(time.time() * 1000) + self._clock_offset_ms
 
     async def get_klines(
         self,

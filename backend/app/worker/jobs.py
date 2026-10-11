@@ -14,7 +14,7 @@ from app import db
 from app.alerts.evaluate import evaluate_price_alerts, evaluate_signal_alerts
 from app.data import repo
 from app.data.exchanges import ExchangeClient
-from app.data.ingest import ingest_candles
+from app.data.ingest import ingest_many
 from app.data.news import NewsSource
 from app.data.news.ingest import ingest_news
 from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
@@ -103,12 +103,7 @@ def ingest_job(client: ExchangeClient, timeframes: list[str] | None = None):
 
     async def work(session: AsyncSession) -> dict:
         frames = timeframes or closed_timeframes(datetime.now(UTC))
-        stored = 0
-        for asset in await repo.list_assets(session):
-            for timeframe in frames:
-                result = await ingest_candles(session, client, asset, timeframe, commit=False)
-                stored += result.stored
-        return {"timeframes": frames, "stored": stored}
+        return await ingest_many(session, client, await repo.list_assets(session), frames)
 
     return work
 
