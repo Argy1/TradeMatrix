@@ -21,7 +21,16 @@ WINDOWS: dict[str, dict[str, int]] = {
 }
 EMBARGO = 1  # candles skipped between train, validation and test so labels never overlap
 
-PERIODS_PER_YEAR = {"1h": 24 * 365, "4h": 6 * 365, "1d": 365}
+PERIODS_PER_YEAR = {
+    "1m": 60 * 24 * 365,
+    "3m": 20 * 24 * 365,
+    "5m": 12 * 24 * 365,
+    "15m": 4 * 24 * 365,
+    "30m": 2 * 24 * 365,
+    "1h": 24 * 365,
+    "4h": 6 * 365,
+    "1d": 365,
+}
 
 # Deliberately small and heavily regularized: the signal in price data is weak.
 XGB_PARAMS: dict = {
@@ -60,6 +69,20 @@ class ModelConfig:
     windows: dict[str, int]
     params: dict
     expanding: bool = False  # True: train on ALL earlier candles, not only the last window
+    # Fast sizes only (see build_features): neutral values in quiet stretches, the extra
+    # order-flow and context features, and one model for all coins instead of one per coin.
+    quiet_safe: bool = False
+    extended: bool = False
+    pooled: bool = False
+    skip_flat: bool = False  # a flat next candle gives no label (see build_labels)
+
+    @property
+    def feature_options(self) -> dict[str, bool]:
+        return {"quiet_safe": self.quiet_safe, "extended": self.extended}
+
+    @property
+    def dataset_options(self) -> dict[str, bool]:
+        return self.feature_options | {"skip_flat": self.skip_flat}
 
 
 # Bigger validation windows: more rows for early stopping and for calibration
@@ -82,8 +105,54 @@ STRONG_REG: dict = XGB_PARAMS | {
 }
 
 
+# ---------- Fast sizes (Phase 5b, 2026-10-11) ----------
+# Windows in candles. A week of 1m candles is already 10,080 rows, so the test folds are short
+# in days and there are many of them. History per size: app/data/history.py.
+FAST_WINDOWS: dict[str, dict[str, int]] = {
+    "1m": {"train": 86_400, "val": 20_160, "test": 10_080, "step": 10_080},  # 60 d / 14 / 7 / 7
+    "3m": {"train": 43_200, "val": 9_600, "test": 3_360, "step": 3_360},  # 90 d / 20 / 7 / 7
+    "5m": {"train": 34_560, "val": 8_064, "test": 4_032, "step": 4_032},  # 120 d / 28 / 14 / 14
+    "15m": {"train": 17_280, "val": 2_880, "test": 1_344, "step": 1_344},  # 180 d / 30 / 14 / 14
+    "30m": {"train": 8_640, "val": 2_880, "test": 672, "step": 672},  # 180 d / 60 / 14 / 14
+}
+# Same protocol as above: candidates are compared on test folds before this date, and the
+# chosen one is scored once on the folds from this date on.
+FAST_EVAL_FROM = {
+    "1m": datetime(2026, 7, 1, tzinfo=UTC),
+    "3m": datetime(2026, 6, 1, tzinfo=UTC),
+    "5m": datetime(2026, 4, 1, tzinfo=UTC),
+    "15m": datetime(2026, 4, 1, tzinfo=UTC),
+    "30m": datetime(2026, 4, 1, tzinfo=UTC),
+}
+
+
+def is_fast(timeframe: str) -> bool:
+    return timeframe in FAST_WINDOWS
+
+
+def dev_window(timeframe: str) -> tuple[datetime | None, datetime]:
+    """(from, until) of the development window; None means "from the first fold"."""
+    if is_fast(timeframe):
+        return None, FAST_EVAL_FROM[timeframe]
+    return DEV_FROM[timeframe], DEV_UNTIL
+
+
+def eval_from(timeframe: str) -> datetime:
+    return FAST_EVAL_FROM[timeframe] if is_fast(timeframe) else EVAL_FROM
+
+
 def candidates(timeframe: str) -> list[ModelConfig]:
     """A deliberately short list: every extra candidate adds a chance of picking a lucky one."""
+    if is_fast(timeframe):
+        windows = FAST_WINDOWS[timeframe]
+        fast = {"quiet_safe": True, "skip_flat": True}
+        return [
+            ModelConfig("fast_basic", windows, STRONG_REG, **fast),
+            ModelConfig("fast_flow", windows, STRONG_REG, extended=True, **fast),
+            ModelConfig(
+                "fast_flow_pooled", windows, STRONG_REG, extended=True, pooled=True, **fast
+            ),
+        ]
     return [
         ModelConfig("v1", WINDOWS[timeframe], XGB_PARAMS),
         ModelConfig("bigval", BIG_VAL[timeframe], XGB_PARAMS),

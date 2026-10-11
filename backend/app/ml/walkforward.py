@@ -35,7 +35,7 @@ def walk_forward(
     in the same part, so no coin's future can leak into another coin's past.
     With `expanding=True` each fold trains on ALL earlier candles instead of the last `train`.
     """
-    unique = pd.DatetimeIndex(sorted(set(times)))
+    unique = pd.DatetimeIndex(times).unique().sort_values()  # fast for millions of rows
     position = unique.get_indexer(times)  # each row's candle number
     folds: list[Fold] = []
     start = 0

@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from app.data.exchanges.base import Candle, ExchangeClient, ExchangeError
-from app.timeframes import TIMEFRAMES
+from app.timeframes import ALL_TIMEFRAMES
 
 MAX_PAGE = 1000  # Binance returns at most 1000 klines per request
 DEFAULT_LATEST = 500
@@ -27,8 +27,10 @@ def _from_ms(ms: int) -> datetime:
 
 
 def _parse(row: list[Any]) -> Candle:
-    # Kline row: [open time, open, high, low, close, volume, close time, ...]
+    # Kline row: [open time, open, high, low, close, volume, close time, quote volume,
+    # number of trades, taker buy volume, ...]
     # Prices arrive as strings, which lets us build exact Decimals.
+    has_flow = len(row) > 9
     return Candle(
         open_time=_from_ms(row[0]),
         open=Decimal(row[1]),
@@ -36,6 +38,8 @@ def _parse(row: list[Any]) -> Candle:
         low=Decimal(row[3]),
         close=Decimal(row[4]),
         volume=Decimal(row[5]),
+        trades=int(row[8]) if has_flow else None,
+        taker_buy_volume=Decimal(row[9]) if has_flow else None,
     )
 
 
@@ -101,7 +105,7 @@ class BinanceClient(ExchangeClient):
         end: datetime | None = None,
         limit: int | None = None,
     ) -> list[Candle]:
-        step = TIMEFRAMES[timeframe]
+        step = ALL_TIMEFRAMES[timeframe]
         now_ms = await self._server_time_ms()
         base = {"symbol": symbol, "interval": timeframe}
 

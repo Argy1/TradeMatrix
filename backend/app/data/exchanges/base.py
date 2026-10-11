@@ -26,6 +26,10 @@ class Candle:
     low: Decimal
     close: Decimal
     volume: Decimal
+    # Order-flow fields, when the exchange sends them: how many trades made up the candle and
+    # how much of the volume was bought by takers (buyers who crossed the spread).
+    trades: int | None = None
+    taker_buy_volume: Decimal | None = None
 
 
 class ExchangeClient(ABC):

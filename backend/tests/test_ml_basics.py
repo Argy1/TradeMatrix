@@ -55,7 +55,12 @@ def test_baselines() -> None:
     prev_up = np.array([1, 1, 0, 0])
     y = np.array([1, 0, 0, 1])
     result = metrics.baselines(prev_up, y, base_rate=0.5)
-    assert result == {"naive": 0.5, "always_up": 0.5, "brier_base_rate": 0.25}
+    assert result == {
+        "naive": 0.5,
+        "always_up": 0.5,
+        "always_down": 0.5,
+        "brier_base_rate": 0.25,
+    }
 
 
 def test_strategy_pays_fees_on_every_trade() -> None:

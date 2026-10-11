@@ -48,11 +48,14 @@ def baselines(prev_up: np.ndarray, y: np.ndarray, base_rate: float) -> dict:
     """The simple rules the model has to beat.
 
     naive: repeat the last candle's direction. always_up: always say Up.
+    always_down: always say Down. A flat candle counts as "not up", and on one-minute candles
+    flat is common, so this rule can look good without knowing anything.
     brier_base_rate: Brier score of always answering the training base rate (no peeking).
     """
     return {
         "naive": float((prev_up == y).mean()),
         "always_up": float(y.mean()),
+        "always_down": float(1 - y.mean()),
         "brier_base_rate": brier(np.full(len(y), base_rate), y),
     }
 
