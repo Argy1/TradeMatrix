@@ -25,20 +25,24 @@ from app.api.schemas import (
 from app.api.v1 import Db
 from app.data import repo
 from app.ml.performance import Resolved, performance
-from app.timeframes import TIMEFRAMES, Timeframe, last_closed_open_time
+from app.timeframes import (
+    TIMEFRAMES,
+    Timeframe,
+    interval_case_sql,
+    last_closed_open_time,
+    stale_grace,
+)
 
 router = APIRouter(prefix="/v1", tags=["signals"])
 
 # The candle before the base candle, for the naive baseline ("repeat the last move").
-_PREVIOUS = (
-    "p.base_open_time - case p.timeframe when '1h' then interval '1 hour' "
-    "when '4h' then interval '4 hours' else interval '1 day' end"
-)
+_PREVIOUS = f"p.base_open_time - {interval_case_sql('p.timeframe')}"
 
 
 def prediction_is_stale(target_open_time: datetime, timeframe: str, now: datetime) -> bool:
     """True if the worker should already have predicted a later candle."""
-    expected = last_closed_open_time(now - repo.STALE_GRACE, timeframe) + TIMEFRAMES[timeframe]
+    grace = stale_grace(timeframe)
+    expected = last_closed_open_time(now - grace, timeframe) + TIMEFRAMES[timeframe]
     return target_open_time < expected
 
 
@@ -192,15 +196,24 @@ async def markets(session: Db) -> list[MarketRow]:
             """
         )
     )
+    # The newest signal of every coin and size. One small index lookup per pair: a query that
+    # sorts the whole table would get slower with every signal the fast sizes add.
     signals = await session.execute(
         text(
             """
-            select distinct on (p.asset_id, p.timeframe)
-                   p.asset_id, p.timeframe, p.label, p.p_up, p.target_open_time, m.status
-            from predictions p join model_versions m on m.id = p.model_version_id
-            order by p.asset_id, p.timeframe, p.target_open_time desc
+            select a.id, tf.timeframe, p.label, p.p_up, p.target_open_time, m.status
+            from assets a
+            cross join unnest(cast(:timeframes as text[])) as tf(timeframe)
+            join lateral (
+              select label, p_up, target_open_time, model_version_id from predictions
+              where asset_id = a.id and timeframe = tf.timeframe
+              order by target_open_time desc limit 1
+            ) p on true
+            join model_versions m on m.id = p.model_version_id
+            where a.active
             """
-        )
+        ),
+        {"timeframes": list(TIMEFRAMES)},
     )
     chips: dict[tuple[int, str], SignalChip] = {
         (asset_id, tf): SignalChip(

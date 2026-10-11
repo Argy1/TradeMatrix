@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import numpy as np
@@ -18,7 +18,7 @@ from app.ml.reasons import build_reasons
 from app.ml.registry import ModelBundle, from_bytes
 from app.ml.storage import ModelStorage
 from app.sentiment.aggregate import sentiment_by_asset
-from app.timeframes import TIMEFRAMES, last_closed_open_time
+from app.timeframes import FAST_TIMEFRAMES, TIMEFRAMES, last_closed_open_time
 
 # Candles loaded for live features. Training computed indicators over the full history; with
 # 1000 candles the EMAs have converged to the same values (difference < 0.001%).
@@ -219,29 +219,53 @@ async def run_predictions(
     return {"created": created, "skipped": skipped, "errors": errors}
 
 
-async def resolve_outcomes(session: AsyncSession) -> dict:
+async def resolve_outcomes(
+    session: AsyncSession,
+    timeframes: list[str] | None = None,
+    *,
+    now: datetime | None = None,
+    look_back: timedelta = timedelta(days=7),
+) -> dict:
     """Fill in what actually happened for every prediction whose target candle has closed.
 
-    Flat counts as down, matching the training label; Neutral calls get correct = null.
+    A flat candle (same close as the one before) follows the training label of its size:
+    on the slow sizes it counts as down; on the fast sizes it is 'flat', which has no result
+    (correct = null), like a Neutral call. See build_labels.
+
+    The query walks coin by coin and size by size through the newest predictions only
+    (`look_back`), so it stays quick however large the table grows.
     """
+    now = now or datetime.now(UTC)
     rows = await session.execute(
         text(
             """
             insert into prediction_outcomes
               (prediction_id, target_close, actual_direction, correct, return_pct)
             select p.id, c.close, d.direction,
-                   case when p.label = 'neutral' then null else p.label = d.direction end,
+                   case when p.label = 'neutral' or d.direction = 'flat' then null
+                        else p.label = d.direction end,
                    (c.close / p.base_close - 1) * 100
-            from predictions p
+            from assets a
+            cross join unnest(cast(:timeframes as text[])) as tf(timeframe)
+            join predictions p on p.asset_id = a.id and p.timeframe = tf.timeframe
+                              and p.target_open_time >= :since
             join candles c on c.asset_id = p.asset_id and c.timeframe = p.timeframe
                           and c.open_time = p.target_open_time
             cross join lateral (
-              select case when c.close > p.base_close then 'up' else 'down' end as direction
+              select case when c.close > p.base_close then 'up'
+                          when c.close = p.base_close
+                               and p.timeframe = any(cast(:fast as text[])) then 'flat'
+                          else 'down' end as direction
             ) d
             where not exists (select 1 from prediction_outcomes o where o.prediction_id = p.id)
             on conflict (prediction_id) do nothing
             returning prediction_id
             """
-        )
+        ),
+        {
+            "timeframes": timeframes or list(TIMEFRAMES),
+            "fast": list(FAST_TIMEFRAMES),
+            "since": now - look_back,
+        },
     )
     return {"resolved": len(rows.all())}

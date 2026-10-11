@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.config import BACKEND_DIR, REPO_ROOT, Settings
-from app.worker.jobs import closed_timeframes, try_lock
+from app.worker.jobs import closed_fast_timeframes, closed_timeframes, try_lock
 
 
 def test_closed_timeframes_follow_the_candle_boundaries() -> None:
@@ -15,6 +15,19 @@ def test_closed_timeframes_follow_the_candle_boundaries() -> None:
     assert closed_timeframes(datetime(2026, 10, 3, 0, 0, 5, tzinfo=UTC)) == ["1h", "4h", "1d"]
     # A late run in the same hour still knows which candles closed at the hour's start.
     assert closed_timeframes(datetime(2026, 10, 3, 8, 9, 0, tzinfo=UTC)) == ["1h", "4h"]
+
+
+def test_fast_sizes_close_on_their_own_minutes() -> None:
+    def at(hour: int, minute: int, second: int = 2) -> list[str]:
+        return closed_fast_timeframes(datetime(2026, 10, 3, hour, minute, second, tzinfo=UTC))
+
+    assert at(13, 1) == ["1m"]
+    assert at(13, 3) == ["1m", "3m"]
+    assert at(13, 5) == ["1m", "5m"]
+    assert at(13, 15) == ["1m", "3m", "5m", "15m"]
+    assert at(13, 30) == ["1m", "3m", "5m", "15m", "30m"]
+    assert at(13, 0) == ["1m", "3m", "5m", "15m", "30m"]  # the slow sizes have their own run
+    assert at(13, 7, second=59) == ["1m"]  # late in the minute: still that minute's candles
 
 
 @pytest.mark.db
@@ -56,7 +69,8 @@ def test_scheduler_has_every_job_at_its_time() -> None:
     scheduler = build_scheduler(settings, client=None, cache=None, sources=[], scorer=object())
     jobs = {job.id: job for job in scheduler.get_jobs()}
     assert set(jobs) == {
-        "candle_close", "ingest_news", "score_sentiment", "check_price_alerts", "heartbeat",
+        "candle_close", "fast_close", "ingest_news", "score_sentiment", "check_price_alerts",
+        "heartbeat",
     }  # fmt: skip
 
     def fires(job_id: str, count: int) -> list[str]:
@@ -69,6 +83,8 @@ def test_scheduler_has_every_job_at_its_time() -> None:
         return times
 
     assert fires("candle_close", 2) == ["12:00:05", "13:00:05"]  # 5 s after each hourly close
+    assert fires("fast_close", 3) == ["12:00:02", "12:01:02", "12:02:02"]  # every minute
+    assert jobs["fast_close"].misfire_grace_time == 20  # a late fast run is dropped
     assert fires("ingest_news", 5) == ["12:02:00", "12:17:00", "12:32:00", "12:47:00", "13:02:00"]
     assert fires("score_sentiment", 4) == ["12:04:00", "12:19:00", "12:34:00", "12:49:00"]
     assert fires("check_price_alerts", 2) == ["12:00:30", "12:01:30"]  # every minute

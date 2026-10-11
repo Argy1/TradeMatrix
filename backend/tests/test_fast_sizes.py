@@ -16,7 +16,6 @@ from app.ml import metrics
 from app.ml.backtest import fold_metrics, fold_rows_of, summarize, summarize_coins
 from app.ml.config import FAST_WINDOWS, PERIODS_PER_YEAR, candidates, dev_window, eval_from, is_fast
 from app.timeframes import (
-    ALL_TIMEFRAMES,
     FAST_TIMEFRAMES,
     TIMEFRAMES,
     floor_time,
@@ -28,8 +27,8 @@ from app.timeframes import (
 # ---------------------------------------------------------------- time maths
 def test_fast_sizes_are_known_and_10m_is_not() -> None:
     assert list(FAST_TIMEFRAMES) == ["1m", "3m", "5m", "15m", "30m"]
-    assert "10m" not in ALL_TIMEFRAMES  # Binance has no 10m candle; 15m takes its place
-    assert set(ALL_TIMEFRAMES) == set(FAST_TIMEFRAMES) | set(TIMEFRAMES)
+    assert "10m" not in TIMEFRAMES  # Binance has no 10m candle; 15m takes its place
+    assert list(TIMEFRAMES) == ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]
     assert set(FAST_WINDOWS) == set(FAST_TIMEFRAMES) <= set(PERIODS_PER_YEAR)
 
 

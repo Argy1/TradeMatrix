@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import text
@@ -19,7 +19,7 @@ from app.data.news import NewsSource
 from app.data.news.ingest import ingest_news
 from app.ml.predict import ModelCache, resolve_outcomes, run_predictions
 from app.sentiment.score import Scorer, score_sentiment
-from app.timeframes import TIMEFRAMES, floor_time
+from app.timeframes import FAST_TIMEFRAMES, SLOW_TIMEFRAMES, floor_time
 
 logger = logging.getLogger("worker")
 
@@ -30,10 +30,17 @@ def log(event: str, **fields: object) -> None:
 
 
 def closed_timeframes(now: datetime) -> list[str]:
-    """Timeframes whose candle closed at the start of this hour (1h always, 4h every 4 hours,
-    1d at 00:00 UTC)."""
+    """Slow sizes whose candle closed at the start of this hour (1h always, 4h every 4 hours,
+    1d at 00:00 UTC). The hourly run may start a few minutes late and still be useful."""
     hour_start = floor_time(now, "1h")
-    return [tf for tf in TIMEFRAMES if floor_time(hour_start, tf) == hour_start]
+    return [tf for tf in SLOW_TIMEFRAMES if floor_time(hour_start, tf) == hour_start]
+
+
+def closed_fast_timeframes(now: datetime) -> list[str]:
+    """Fast sizes whose candle closed at the start of this minute (1m always, 5m at :00, :05,
+    ..., 30m at :00 and :30)."""
+    minute_start = floor_time(now, "1m")
+    return [tf for tf in FAST_TIMEFRAMES if floor_time(minute_start, tf) == minute_start]
 
 
 async def try_lock(session: AsyncSession, job_name: str) -> bool:
@@ -119,8 +126,11 @@ def predictions_job(cache: ModelCache, blend_k: float, timeframes: list[str] | N
     return work
 
 
-async def outcomes_work(session: AsyncSession) -> dict:
-    return await resolve_outcomes(session)
+def outcomes_job(timeframes: list[str] | None = None, look_back: timedelta = timedelta(days=7)):
+    async def work(session: AsyncSession) -> dict:
+        return await resolve_outcomes(session, timeframes, look_back=look_back)
+
+    return work
 
 
 def news_job(sources: Sequence[NewsSource]):
@@ -177,7 +187,30 @@ async def candle_close(
     """The heart of the system (docs/02): store the closed candles, predict the next ones,
     score the predictions whose target candle just closed, then check the signal alerts.
     In this order, every hour."""
-    await run_job("ingest_candles", ingest_job(client, timeframes))
-    await run_job("run_predictions", predictions_job(cache, blend_k, timeframes))
-    await run_job("resolve_outcomes", outcomes_work)
+    slow = timeframes or closed_timeframes(datetime.now(UTC))
+    await run_job("ingest_candles", ingest_job(client, slow))
+    await run_job("run_predictions", predictions_job(cache, blend_k, slow))
+    await run_job("resolve_outcomes", outcomes_job(timeframes or list(SLOW_TIMEFRAMES)))
     await run_job("evaluate_alerts", alerts_work)
+
+
+async def fast_close(client: ExchangeClient, cache: ModelCache, blend_k: float) -> None:
+    """The same four steps for the fast sizes, every minute.
+
+    It is a pipeline of its own, with its own job names (locks and heartbeats), so the hourly
+    run above works exactly as before and neither can make the other skip. Only the alert
+    check shares its name: if both arrive at the same second, one skips, and the next
+    minute's run picks the alerts up.
+
+    The sizes are fixed once at the start: a run that begins at 12:05:02 handles the candles
+    that closed at 12:05:00, even if a step finishes after the minute has turned.
+    """
+    sizes = closed_fast_timeframes(datetime.now(UTC))
+    quiet = {"quiet_when_idle": True}  # 1,440 "all fine" lines a day per step would bury the rest
+    await run_job("ingest_candles_fast", ingest_job(client, sizes), **quiet)
+    await run_job("run_predictions_fast", predictions_job(cache, blend_k, sizes))
+    # Only the newest signals can have just received their result; older ones are caught by
+    # the catch-up at start.
+    recent = outcomes_job(list(FAST_TIMEFRAMES), look_back=timedelta(hours=2))
+    await run_job("resolve_outcomes_fast", recent, **quiet)
+    await run_job("evaluate_alerts", alerts_work, **quiet)

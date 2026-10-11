@@ -22,7 +22,7 @@ from app.config import BACKEND_DIR, get_settings
 from app.data import repo
 from app.data.exchanges import ExchangeClient, get_exchange_client
 from app.data.exchanges.base import Candle
-from app.timeframes import ALL_TIMEFRAMES, FAST_TIMEFRAMES, floor_time
+from app.timeframes import FAST_TIMEFRAMES, TIMEFRAMES, floor_time
 
 HISTORY_DIR = BACKEND_DIR / "data" / "history"  # git-ignored (backend/.gitignore)
 
@@ -88,7 +88,7 @@ async def update(
 ) -> int:
     """Download every closed candle that is not in the file yet. Returns how many were added."""
     now = now or datetime.now(UTC)
-    step = ALL_TIMEFRAMES[timeframe]
+    step = TIMEFRAMES[timeframe]
     path = path_for(symbol, timeframe)
     stored = pd.read_parquet(path) if path.exists() else None
     if stored is not None and len(stored):
@@ -132,7 +132,7 @@ async def run(symbols: list[str], timeframes: list[str]) -> None:
 
     try:
         # Small sizes last: they are the long downloads, and the others are usable meanwhile.
-        order = sorted(timeframes, key=lambda tf: ALL_TIMEFRAMES[tf], reverse=True)
+        order = sorted(timeframes, key=lambda tf: TIMEFRAMES[tf], reverse=True)
         await asyncio.gather(*(one(asset, tf) for tf in order for asset in assets))
     finally:
         await client.aclose()

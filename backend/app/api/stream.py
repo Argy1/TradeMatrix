@@ -7,7 +7,7 @@
 
 One upstream connection to Binance's market-data stream feeds every browser (fan-out), so
 a thousand viewers still cost one exchange connection. New predictions are found by polling the
-database every 5 seconds (simple, works through the Supabase pooler; docs/02).
+database every 2 seconds (simple, works through the Supabase pooler; docs/02).
 """
 
 import asyncio
@@ -32,7 +32,7 @@ router = APIRouter()
 MAX_SYMBOLS = 10
 PING_EVERY = 20  # seconds
 IDLE_LIMIT = 60  # close the connection after this long without a pong
-POLL_EVERY = 5
+POLL_EVERY = 2  # a one-minute signal should not wait long to reach the apps
 
 
 @dataclass(eq=False)

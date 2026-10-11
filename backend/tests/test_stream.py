@@ -42,7 +42,7 @@ def test_kline_becomes_the_documented_candle_message() -> None:
 
 def test_unknown_pairs_and_intervals_are_ignored() -> None:
     assert parse_kline(kline("DOGEUSDT"), PAIRS) is None
-    assert parse_kline(kline(interval="15m"), PAIRS) is None
+    assert parse_kline(kline(interval="2h"), PAIRS) is None
     assert parse_kline(json.dumps({"result": None, "id": 1}), PAIRS) is None
 
 
@@ -80,7 +80,7 @@ def test_websocket_receives_subscribed_candles(known_pairs) -> None:
         assert message["symbol"] == "BTC" and message["candle"]["c"] == "84588.00"
 
 
-@pytest.mark.parametrize("query", ["symbols=DOGE&tf=1h", "symbols=BTC&tf=5m", "tf=1h"])
+@pytest.mark.parametrize("query", ["symbols=DOGE&tf=1h", "symbols=BTC&tf=10m", "tf=1h"])
 def test_websocket_rejects_bad_requests(known_pairs, query: str) -> None:
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect), client.websocket_connect(f"/ws/stream?{query}") as ws:

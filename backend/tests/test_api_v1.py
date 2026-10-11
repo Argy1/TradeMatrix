@@ -12,7 +12,7 @@ from app.api.main import app
 from app.data.exchanges.base import Candle
 from app.data.repo import Asset, Heartbeat
 from app.features.chart import WARMUP
-from app.timeframes import last_closed_open_time
+from app.timeframes import TIMEFRAMES, last_closed_open_time
 
 BTC = Asset(id=1, symbol="BTC", name="Bitcoin", exchange_symbol="BTCUSDT")
 NOW = datetime.now(UTC)
@@ -59,7 +59,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         return calls.get("latest", stored[-1].open_time)
 
     async def oldest_latest_candle(_session):
-        return {"1h": stored[-1].open_time, "4h": None, "1d": None}
+        return dict.fromkeys(TIMEFRAMES) | {"1h": stored[-1].open_time}
 
     async def list_heartbeats(_session):
         return [Heartbeat("ingest_candles", NOW, NOW, None)]
@@ -142,7 +142,7 @@ def test_candles_marked_stale_when_the_latest_candle_is_missing(client: TestClie
     ("params", "status", "code"),
     [
         ({"symbol": "NOTACOIN", "tf": "1h"}, 404, "not_found"),
-        ({"symbol": "BTC", "tf": "5m"}, 422, "validation_error"),
+        ({"symbol": "BTC", "tf": "10m"}, 422, "validation_error"),
         ({"symbol": "BTC", "tf": "1h", "limit": 501}, 422, "validation_error"),
         ({"symbol": "BTC", "tf": "1h", "limit": 0}, 422, "validation_error"),
         ({"tf": "1h"}, 422, "validation_error"),

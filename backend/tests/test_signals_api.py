@@ -33,7 +33,7 @@ def fake_client(monkeypatch: pytest.MonkeyPatch):
         ("/v1/predictions/latest?symbol=NOTACOIN&tf=1h", 404),
         ("/v1/predictions/history?symbol=NOTACOIN&tf=1h", 404),
         ("/v1/performance?symbol=NOTACOIN", 404),
-        ("/v1/predictions/latest?symbol=BTC&tf=15m", 422),
+        ("/v1/predictions/latest?symbol=BTC&tf=10m", 422),
         ("/v1/predictions/history?symbol=BTC&tf=1h&limit=501", 422),
         ("/v1/performance?days=0", 422),
     ],

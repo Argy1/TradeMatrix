@@ -11,7 +11,9 @@ from app.data.quality import QualityReport, check_candles, valid_candles
 from app.timeframes import TIMEFRAMES, floor_time
 
 # History to load the first time (docs/03): 1h about 2 years, 4h about 3, 1d about 5.
-BACKFILL_DAYS = {"1h": 730, "4h": 1095, "1d": 1826}
+# The fast sizes only need what the live system uses: at least 1,500 candles for the chart and
+# the features. Their long history for training lives in files (app/data/history.py).
+BACKFILL_DAYS = {"1m": 2, "3m": 4, "5m": 6, "15m": 16, "30m": 32, "1h": 730, "4h": 1095, "1d": 1826}
 
 
 @dataclass

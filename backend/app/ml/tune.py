@@ -110,7 +110,8 @@ def write_tuning_report(rows: list[dict]) -> None:
     for timeframe in dict.fromkeys(r["timeframe"] for r in rows):
         best = max((r for r in rows if r["timeframe"] == timeframe), key=lambda r: r["brier_gain"])
         lines.append(f"- {timeframe}: `{best['config']}` ({best['brier_gain']:+.5f})")
-    name = f"tuning_fast_{stamp}.md" if fast else f"tuning_{stamp}.md"
+    sizes = "_".join(dict.fromkeys(r["timeframe"] for r in rows))
+    name = f"tuning_{sizes}_{stamp}.md" if fast else f"tuning_{stamp}.md"
     (REPORTS_DIR / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

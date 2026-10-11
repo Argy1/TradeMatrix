@@ -6,16 +6,15 @@ Values always travel as parameters (:name), never by string formatting.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.exchanges.base import Candle
-from app.timeframes import TIMEFRAMES, last_closed_open_time
+from app.timeframes import TIMEFRAMES, last_closed_open_time, stale_grace
 
 UPSERT_CHUNK = 2000
-STALE_GRACE = timedelta(minutes=3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +176,7 @@ async def oldest_latest_candle(session: AsyncSession) -> dict[str, datetime | No
         text(
             """
             select tf.timeframe, min(latest.open_time)
-            from (values ('1h'), ('4h'), ('1d')) as tf(timeframe)
+            from unnest(cast(:timeframes as text[])) as tf(timeframe)
             cross join assets a
             left join lateral (
               select max(open_time) as open_time from candles c
@@ -187,7 +186,8 @@ async def oldest_latest_candle(session: AsyncSession) -> dict[str, datetime | No
             group by tf.timeframe
             having count(latest.open_time) = count(*)
             """
-        )
+        ),
+        {"timeframes": list(TIMEFRAMES)},
     )
     found = {row[0]: row[1] for row in rows}
     return {timeframe: found.get(timeframe) for timeframe in TIMEFRAMES}
@@ -243,5 +243,5 @@ def is_stale(latest: datetime | None, timeframe: str, now: datetime) -> bool:
     The worker stores a candle a few seconds after it closes, so we allow a short grace
     period before calling the data stale.
     """
-    expected = last_closed_open_time(now - STALE_GRACE, timeframe)
+    expected = last_closed_open_time(now - stale_grace(timeframe), timeframe)
     return latest is None or latest < expected

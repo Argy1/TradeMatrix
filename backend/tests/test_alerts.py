@@ -273,7 +273,9 @@ def test_another_users_rule_looks_like_it_does_not_exist(client) -> None:
         {"symbol": "BTC", "type": "price_above", "timeframe": "1h", "threshold": "85000"},
         {"symbol": "BTC", "type": "price_above"},
         {"symbol": "BTC", "type": "buy_now", "threshold": "1"},  # not a rule we offer
-        {"symbol": "BTC", "type": "signal_change", "timeframe": "15m"},
+        {"symbol": "BTC", "type": "signal_change", "timeframe": "10m"},  # not a size we offer
+        # A fast size with a cooldown under 15 minutes could notify every minute.
+        {"symbol": "BTC", "type": "signal_change", "timeframe": "1m", "cooldown_minutes": 5},
         {"symbol": "BTC", "type": "signal_change", "timeframe": "1h", "cooldown_minutes": 0},
     ],
 )

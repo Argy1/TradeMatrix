@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from app.timeframes import timeframe_words
+
 SIGNAL_TYPES = ("signal_change", "prob_above", "prob_below")
 PRICE_TYPES = ("price_above", "price_below")
 ALERT_TYPES = SIGNAL_TYPES + PRICE_TYPES
@@ -17,7 +19,6 @@ ALERT_TYPES = SIGNAL_TYPES + PRICE_TYPES
 DISCLAIMER_SHORT = "Not financial advice. Estimates only."
 
 _WORD = {"up": "Up", "down": "Down", "neutral": "Neutral"}
-_TF_WORDS = {"1h": "1 hour", "4h": "4 hour", "1d": "1 day"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +68,7 @@ def price_alert_fires(
 
 def _chance(label: str, p_up: float, timeframe: str) -> str:
     """The same sentence shape the signal card uses (docs/08)."""
-    candle = f"the next {_TF_WORDS[timeframe]} candle"
+    candle = f"the next {timeframe_words(timeframe)} candle"
     if label == "up":
         return f"{p_up:.1%} chance {candle} closes higher."
     if label == "down":

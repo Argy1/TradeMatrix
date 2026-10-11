@@ -27,6 +27,7 @@ from app.sentiment.score import Scorer
 from app.timeframes import TIMEFRAMES
 from app.worker.jobs import (
     candle_close,
+    fast_close,
     heartbeat_work,
     log,
     news_job,
@@ -56,6 +57,18 @@ def build_scheduler(
         max_instances=1,  # never two runs of the same job at once
         coalesce=True,  # after a pause, run once instead of once per missed hour
         misfire_grace_time=600,
+    )
+    # Two seconds after every minute, when a 1m candle (and at :00, :05, ... the larger fast
+    # sizes) has just closed. A fast signal is only useful right away: if the run cannot start
+    # within 20 seconds it is dropped, never queued behind the next one.
+    scheduler.add_job(
+        fast_close,
+        CronTrigger(second=2, timezone="UTC"),
+        args=[client, cache, k],
+        id="fast_close",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=20,
     )
     # Headlines every 15 minutes, at :02 :17 :32 :47, so it never starts together with the
     # hourly candle run at :00.

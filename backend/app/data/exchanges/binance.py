@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from app.data.exchanges.base import Candle, ExchangeClient, ExchangeError
-from app.timeframes import ALL_TIMEFRAMES
+from app.timeframes import TIMEFRAMES
 
 MAX_PAGE = 1000  # Binance returns at most 1000 klines per request
 DEFAULT_LATEST = 500
@@ -105,7 +105,7 @@ class BinanceClient(ExchangeClient):
         end: datetime | None = None,
         limit: int | None = None,
     ) -> list[Candle]:
-        step = ALL_TIMEFRAMES[timeframe]
+        step = TIMEFRAMES[timeframe]
         now_ms = await self._server_time_ms()
         base = {"symbol": symbol, "interval": timeframe}
 

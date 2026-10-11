@@ -20,14 +20,25 @@ from app.api.auth import CurrentUser
 from app.api.errors import ApiError
 from app.api.v1 import Db
 from app.data import repo
-from app.timeframes import Timeframe
+from app.timeframes import FAST_TIMEFRAMES, Timeframe
 
 router = APIRouter(prefix="/v1", tags=["alerts"])
 
 MAX_ALERTS = 20  # per user; keeps the worker's checks small and stops abuse
 MAX_COOLDOWN = 7 * 24 * 60  # one week, in minutes
+# A one-minute signal can change every minute. Without a floor, one rule could send
+# 1,440 notifications a day.
+MIN_FAST_COOLDOWN = 15
 
 AlertType = Literal["signal_change", "prob_above", "prob_below", "price_above", "price_below"]
+
+
+def check_cooldown(timeframe: str | None, cooldown_minutes: int) -> None:
+    if timeframe in FAST_TIMEFRAMES and cooldown_minutes < MIN_FAST_COOLDOWN:
+        raise ValueError(
+            f"alerts on candles shorter than 1 hour need a cooldown of at least "
+            f"{MIN_FAST_COOLDOWN} minutes"
+        )
 
 
 def check_threshold(alert_type: str, threshold: Decimal | None) -> None:
@@ -58,6 +69,7 @@ class AlertIn(BaseModel):
         if self.type in PRICE_TYPES and self.timeframe is not None:
             raise ValueError("price alerts have no timeframe")
         check_threshold(self.type, self.threshold)
+        check_cooldown(self.timeframe, self.cooldown_minutes)
         return self
 
 
@@ -282,6 +294,11 @@ async def patch_alert(session: Db, user: CurrentUser, alert_id: UUID, body: Aler
             check_threshold(current.type, changes["threshold"])
         except ValueError as exc:
             raise ApiError(422, "validation_error", f"threshold: {exc}") from exc
+    if "cooldown_minutes" in changes:
+        try:
+            check_cooldown(current.timeframe, changes["cooldown_minutes"])
+        except ValueError as exc:
+            raise ApiError(422, "validation_error", f"cooldown_minutes: {exc}") from exc
     if changes:
         await update_alert(session, user.user_id, alert_id, changes)
     updated = await get_alert(session, user.user_id, alert_id)
