@@ -3,8 +3,14 @@
 import { AlertTriangle, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import type { Prediction, Timeframe } from "@/lib/api/client";
-import { DISCLAIMER, EFFECT_TAG, REASON_EXPLAINERS } from "@/lib/copy";
+import { isFast, type Prediction, type Timeframe } from "@/lib/api/client";
+import {
+  DISCLAIMER,
+  EFFECT_TAG,
+  FAST_NOTE,
+  REASON_EXPLAINERS,
+  WAITING_FOR_SIGNAL,
+} from "@/lib/copy";
 import { formatClock, formatCountdown, formatProbability, timeframeWords } from "@/lib/format";
 import {
   DEGRADED_WARNING,
@@ -149,14 +155,19 @@ function Reliability({ prediction, symbol }: { prediction: Prediction; symbol: s
   );
 }
 
-function Countdown({ targetIso }: { targetIso: string }) {
-  const [now, setNow] = useState(() => new Date());
+/** The current time, refreshed every `everyMs` (a clock for countdowns). */
+function useNow(everyMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30_000);
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
     return () => clearInterval(timer);
-  }, []);
-  return <>{formatCountdown(targetIso, now)}</>;
+  }, [everyMs]);
+  return now;
 }
+
+// After a fast candle closes, the next signal needs a few seconds to arrive. Longer than this
+// and the old direction must not stay on screen as if it were current.
+const EXPIRED_AFTER_MS = 8_000;
 
 export function SignalCard({
   prediction,
@@ -169,6 +180,11 @@ export function SignalCard({
   const direction = asDirection(prediction.label);
   const probability = shownProbability(direction, prediction.p_up);
   const degraded = prediction.model.status === "degraded";
+  // Fast candles count down by the second; the slow ones by the half minute, as before.
+  const fast = isFast(tf);
+  const now = useNow(fast ? 1000 : 30_000);
+  const closesAt = new Date(prediction.target_close_time).getTime();
+  const expired = fast && now > closesAt + EXPIRED_AFTER_MS;
 
   return (
     <div className="space-y-3">
@@ -191,6 +207,14 @@ export function SignalCard({
           <span className="tracking-normal">for the next {timeframeWords(tf)} candle</span>
         </header>
 
+        {expired ? (
+          <div role="status" className="tile space-y-2 p-6 text-center">
+            <Clock aria-hidden size={28} className="mx-auto text-neutral" />
+            <p className="font-display text-xl font-bold text-neutral">Waiting for the next signal</p>
+            <p className="text-sm text-fg-2">{WAITING_FOR_SIGNAL}</p>
+          </div>
+        ) : (
+          <>
         <Orb direction={direction} probability={probability} />
 
         <div className="space-y-2 text-center">
@@ -214,10 +238,12 @@ export function SignalCard({
             <strong className="font-mono text-fg">
               {formatClock(prediction.target_close_time)}
             </strong>
-            , <Countdown targetIso={prediction.target_close_time} />. A new signal appears right
-            after it closes.
+            , {formatCountdown(prediction.target_close_time, new Date(now), { seconds: fast })}. A
+            new signal appears right after it closes.
           </span>
         </p>
+          </>
+        )}
 
         <section aria-labelledby="why" className="space-y-3">
           <div>
@@ -253,6 +279,8 @@ export function SignalCard({
         </section>
 
         <Reliability prediction={prediction} symbol={prediction.symbol} />
+
+        {fast && <p className="text-sm leading-relaxed text-fg-2">{FAST_NOTE}</p>}
 
         <p className="rounded-2xl border border-neutral/40 bg-neutral/10 p-4 text-sm leading-relaxed text-fg-2">
           {DISCLAIMER}

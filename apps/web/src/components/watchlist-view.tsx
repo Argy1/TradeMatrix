@@ -4,12 +4,13 @@ import { Star, StarOff } from "lucide-react";
 import Link from "next/link";
 
 import { useSession, useToggleWatchlist, useWatchlist } from "@/lib/api/account";
-import { TIMEFRAMES } from "@/lib/api/client";
 import { useMarkets } from "@/lib/api/hooks";
 import { formatChange, formatPrice, formatProbability } from "@/lib/format";
+import { usePickedSize } from "@/lib/picked-size";
 import { asDirection, shownProbability } from "@/lib/signal";
 
 import { DIRECTION_TEXT, DirectionIcon } from "./direction";
+import { SizeSwitch } from "./size-switch";
 import { ErrorState, Skeleton } from "./states";
 
 /** Star button on the coin page: add or remove this coin from the watchlist. */
@@ -44,6 +45,7 @@ export function WatchlistView() {
   const list = useWatchlist(session);
   const toggle = useToggleWatchlist(session);
   const markets = useMarkets();
+  const [size, pickSize] = usePickedSize();
 
   if (!ready) return <Skeleton className="h-64" />;
   if (!session)
@@ -63,6 +65,10 @@ export function WatchlistView() {
 
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="shrink-0 text-sm text-muted">Candle size</span>
+        <SizeSwitch value={size} onPick={pickSize} />
+      </div>
       {mine.length === 0 ? (
         <div className="glass space-y-2 p-6">
           <p className="font-semibold">Your watchlist is empty.</p>
@@ -72,7 +78,7 @@ export function WatchlistView() {
         <ul className="space-y-3">
           {mine.map((row) => (
             <li key={row.symbol} className="glass flex flex-wrap items-center gap-4 p-4 sm:p-5">
-              <Link href={`/markets/${row.symbol}?tf=1h`} className="w-32">
+              <Link href={`/markets/${row.symbol}?tf=${size}`} className="w-32">
                 <p className="font-display text-lg font-bold">{row.symbol}</p>
                 <p className="text-sm text-muted">{row.name}</p>
               </Link>
@@ -81,7 +87,7 @@ export function WatchlistView() {
                 <p className="text-sm text-muted">{formatChange(row.change_24h_pct)} 24h</p>
               </div>
               <div className="flex flex-1 flex-wrap gap-2">
-                {TIMEFRAMES.map((tf) => {
+                {[size].map((tf) => {
                   const chip = row.signals[tf];
                   if (!chip) return null;
                   const direction = asDirection(chip.label);

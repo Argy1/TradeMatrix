@@ -21,9 +21,28 @@ export type Candle = Schemas["CandleOut"];
 export type HistoryItem = Schemas["HistoryItem"];
 export type Performance = Schemas["PerformanceOut"];
 export type NewsItem = Schemas["NewsItemOut"];
-export type Timeframe = "1h" | "4h" | "1d";
+export type Timeframe = "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
 
-export const TIMEFRAMES: Timeframe[] = ["1h", "4h", "1d"];
+// Same sizes and order as the API (backend/app/timeframes.py). The fast sizes get a new
+// signal every 1 to 30 minutes; Binance has no 10m candle, so 15m takes its place.
+export const FAST_TIMEFRAMES: Timeframe[] = ["1m", "3m", "5m", "15m", "30m"];
+export const SLOW_TIMEFRAMES: Timeframe[] = ["1h", "4h", "1d"];
+export const TIMEFRAMES: Timeframe[] = [...FAST_TIMEFRAMES, ...SLOW_TIMEFRAMES];
+export const DEFAULT_TIMEFRAME: Timeframe = "1h";
+
+export function isTimeframe(value: unknown): value is Timeframe {
+  return TIMEFRAMES.includes(value as Timeframe);
+}
+
+export function isFast(tf: Timeframe): boolean {
+  return FAST_TIMEFRAMES.includes(tf);
+}
+
+/** Length of one candle in seconds: "15m" -> 900. */
+export function timeframeSeconds(tf: Timeframe): number {
+  const unit = { m: 60, h: 3600, d: 86_400 }[tf.slice(-1) as "m" | "h" | "d"];
+  return Number(tf.slice(0, -1)) * unit;
+}
 
 export class ApiError extends Error {
   constructor(

@@ -14,7 +14,20 @@ export const REASON_EXPLAINERS: Record<string, string> = {
   bollinger: "Bollinger Bands mark the usual price range; outside them, moves are stretched.",
   momentum: "How far the price moved over the last 24 candles.",
   sentiment: "The average tone of recent news headlines about this coin.",
+  order_flow:
+    "Who was in a hurry. Buyers who do not wait push the price up; sellers who do not wait push it down.",
 };
+
+// Shown under every signal for a candle shorter than 1 hour (docs/06, approved by Argy).
+export const FAST_NOTE =
+  "Short candles are mostly noise. Many signals will be Neutral, and fees are usually larger than the move.";
+
+// The shown signal's candle has closed and the next signal has not arrived yet (docs/08).
+export const WAITING_FOR_SIGNAL =
+  "Waiting for the next signal. The candle this signal was for has closed.";
+
+// A candle that closes at exactly the previous close, on a size under 1 hour: no result.
+export const FLAT_RESULT = "Flat: the candle closed at the same price, so there is no result.";
 
 // News section. Which of the two sentences is shown comes from the API (`sentiment_used`),
 // so the page never claims news is part of the signal while it is only being recorded.

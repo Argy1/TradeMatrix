@@ -3,12 +3,13 @@
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-import { TIMEFRAMES } from "@/lib/api/client";
 import { useMarkets, usePerformance } from "@/lib/api/hooks";
 import { formatChange, formatPrice, formatProbability } from "@/lib/format";
+import { usePickedSize } from "@/lib/picked-size";
 import { type Direction, asDirection, shownProbability } from "@/lib/signal";
 
 import { DIRECTION_TEXT, DirectionIcon } from "./direction";
+import { SizeSwitch } from "./size-switch";
 import { ErrorState, Skeleton } from "./states";
 
 const CHIP: Record<Direction, { word: string; bg: string; border: string }> = {
@@ -19,16 +20,23 @@ const CHIP: Record<Direction, { word: string; bg: string; border: string }> = {
 
 export function MarketList() {
   const markets = useMarkets();
+  // Eight chips per row do not fit: the list shows the one size picked here (docs/08).
+  const [size, pickSize] = usePickedSize();
   if (markets.isPending) return <Skeleton className="h-96" />;
   if (markets.isError)
     return <ErrorState message="Could not load the markets." onRetry={() => markets.refetch()} />;
   return (
+    <div className="space-y-3">
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="shrink-0 text-sm text-muted">Candle size</span>
+      <SizeSwitch value={size} onPick={pickSize} />
+    </div>
     <div className="glass overflow-hidden">
       <ul>
         {markets.data.map((row, index) => (
           <li key={row.symbol} className={index ? "border-t border-white/8" : ""}>
             <Link
-              href={`/markets/${row.symbol}?tf=1h`}
+              href={`/markets/${row.symbol}?tf=${size}`}
               className="flex flex-wrap items-center gap-x-5 gap-y-3.5 px-6 py-4.5 hover:bg-white/5"
             >
               <span className="flex min-w-0 flex-[1_1_190px] items-center gap-3.5">
@@ -51,11 +59,11 @@ export function MarketList() {
                 </span>
               </span>
               <span className="flex flex-[3_1_420px] flex-wrap gap-2.5">
-                {TIMEFRAMES.map((tf) => {
+                {[size].map((tf) => {
                   const chip = row.signals[tf];
                   if (!chip)
                     return (
-                      <span key={tf} className="flex min-h-12 flex-[1_1_120px] items-center rounded-[14px] border border-white/10 px-3 text-xs text-muted">
+                      <span key={tf} className="flex min-h-12 max-w-[280px] flex-[1_1_120px] items-center rounded-[14px] border border-white/10 px-3 text-xs text-muted">
                         {tf}: no signal
                       </span>
                     );
@@ -65,7 +73,7 @@ export function MarketList() {
                   return (
                     <span
                       key={tf}
-                      className="flex min-h-12 flex-[1_1_120px] items-center gap-2 rounded-[14px] border px-3 py-1.5 shadow-[0_3px_0_rgba(0,0,0,.4)]"
+                      className="flex min-h-12 max-w-[280px] flex-[1_1_120px] items-center gap-2 rounded-[14px] border px-3 py-1.5 shadow-[0_3px_0_rgba(0,0,0,.4)]"
                       style={{ background: style.bg, borderColor: style.border }}
                     >
                       <span className="w-6 text-xs font-bold text-muted">{tf}</span>
@@ -97,14 +105,18 @@ export function MarketList() {
         ))}
       </ul>
     </div>
+    </div>
   );
 }
 
 export function TrackStrip() {
-  const perf = usePerformance({ days: 30 });
+  // One candle size at a time: the fast sizes make far more signals than the slow ones, so a
+  // number across all sizes would mostly be a one-minute number.
+  const [size] = usePickedSize();
+  const perf = usePerformance({ days: 30, tf: size });
   const data = perf.data;
   const tiles = [
-    { label: "Signals recorded", value: data ? String(data.n_predictions) : "…", tone: "" },
+    { label: `${size} signals recorded`, value: data ? String(data.n_predictions) : "…", tone: "" },
     {
       label: "Accuracy, last 30 days",
       value: data?.accuracy != null ? formatProbability(data.accuracy) : "not enough data",

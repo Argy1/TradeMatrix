@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
 
-import { ApiError, type Candle, type HistoryItem, TIMEFRAMES, type Timeframe } from "@/lib/api/client";
+import { ApiError, type Candle, type HistoryItem, isFast, type Timeframe } from "@/lib/api/client";
 import { useCandles, useHistory, useLatestPrediction, useMarkets } from "@/lib/api/hooks";
 import { useLiveStream } from "@/lib/api/live";
 import { DISCLAIMER_SHORT } from "@/lib/copy";
@@ -14,6 +14,7 @@ import { DIRECTION_TEXT, DirectionIcon, DirectionLabel } from "./direction";
 import { NewsList } from "./news-list";
 import { PriceChart } from "./price-chart";
 import { SignalCard } from "./signal-card";
+import { SizeSwitch } from "./size-switch";
 import { ErrorState, Skeleton } from "./states";
 import { WatchToggle } from "./watchlist-view";
 
@@ -123,20 +124,29 @@ function RecentSignals({ items }: { items: HistoryItem[] }) {
   const resolved = items.filter((item) => item.outcome);
   if (resolved.length === 0)
     return <p className="text-sm text-muted">No finished signals yet. They appear after each candle closes.</p>;
-  const calls = resolved.filter((item) => item.outcome?.correct !== null);
+  // On candle sizes under 1 hour a candle can close flat (same price): no result (docs/03).
+  const isFlat = (item: HistoryItem) => item.outcome?.actual_direction === "flat";
+  const flat = resolved.filter(isFlat).length;
+  const calls = resolved.filter((item) => item.outcome?.correct != null);
   const hits = calls.filter((item) => item.outcome?.correct).length;
-  const skipped = resolved.length - calls.length;
+  const skipped = resolved.length - calls.length - flat;
   return (
     <div>
       <ul className="flex flex-wrap gap-2">
         {resolved.map((item) => {
           const direction = asDirection(item.label);
-          const result = item.outcome?.correct === null ? "Skip" : item.outcome?.correct ? "Hit" : "Miss";
+          const result = isFlat(item)
+            ? "Flat"
+            : item.outcome?.correct == null
+              ? "Skip"
+              : item.outcome.correct
+                ? "Hit"
+                : "Miss";
           return (
             <li
               key={item.target_open_time}
               title={`${formatDateTime(item.target_open_time)}: called ${direction}, went ${item.outcome?.actual_direction}`}
-              className={`key flex h-[76px] w-[68px] flex-col items-center justify-center gap-1 text-xs font-semibold ${DIRECTION_TEXT[direction]}`}
+              className={`key flex h-[76px] w-[68px] flex-col items-center justify-center gap-1 text-xs font-semibold ${isFlat(item) ? "text-neutral" : DIRECTION_TEXT[direction]}`}
             >
               <DirectionIcon direction={direction} size={18} />
               <span className="text-fg">{result}</span>
@@ -145,7 +155,8 @@ function RecentSignals({ items }: { items: HistoryItem[] }) {
         })}
       </ul>
       <p className="mt-3 text-sm text-fg-2">
-        {hits} of {calls.length} calls correct{skipped ? `, ${skipped} skipped as Neutral` : ""}.
+        {hits} of {calls.length} calls correct{skipped ? `, ${skipped} skipped as Neutral` : ""}
+        {flat ? `, ${flat} flat (no result)` : ""}.
       </p>
     </div>
   );
@@ -201,19 +212,10 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
           />
           {live.status === "live" ? "Live" : live.status === "connecting" ? "Connecting…" : "Offline, retrying"}
         </p>
-        <span className="ml-auto text-sm text-muted">Candle size</span>
-        <nav aria-label="Candle size" className="flex gap-2">
-          {TIMEFRAMES.map((option) => (
-            <Link
-              key={option}
-              href={`/markets/${symbol}?tf=${option}`}
-              aria-current={option === tf ? "page" : undefined}
-              className="key px-4 py-3 font-mono text-sm font-semibold"
-            >
-              {option}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex w-full items-center gap-3">
+          <span className="shrink-0 text-sm text-muted">Candle size</span>
+          <SizeSwitch value={tf} hrefFor={(option) => `/markets/${symbol}?tf=${option}`} />
+        </div>
       </div>
 
       <GuideStrip />
@@ -282,6 +284,7 @@ export function CoinView({ symbol, tf }: { symbol: string; tf: Timeframe }) {
               <p className="text-sm text-muted">
                 Newest first. Hit means the candle closed the way we said. Skip means the odds were
                 too close, so we made no call.
+                {isFast(tf) && " Flat means the candle closed at the same price: no result."}
               </p>
             </div>
             {history.data ? <RecentSignals items={history.data.items} /> : <Skeleton className="h-24" />}

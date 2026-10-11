@@ -4,11 +4,11 @@ import type { Timeframe } from "./api/client";
 export const DISPLAY_TIME_ZONE = "Asia/Jakarta";
 export const DISPLAY_ZONE_LABEL = "WIB";
 
-const TF_WORDS: Record<Timeframe, string> = { "1h": "1 hour", "4h": "4 hour", "1d": "1 day" };
+const UNIT_WORDS = { m: "minute", h: "hour", d: "day" } as const;
 
-/** "1 hour" / "4 hour" / "1 day", as used in "the next 1 hour candle". */
+/** "15 minute" / "1 hour" / "1 day", as used in "the next 1 hour candle". */
 export function timeframeWords(tf: Timeframe): string {
-  return TF_WORDS[tf];
+  return `${tf.slice(0, -1)} ${UNIT_WORDS[tf.slice(-1) as keyof typeof UNIT_WORDS]}`;
 }
 
 /** Prices arrive as exact strings; show thousands separators without float rounding. */
@@ -67,8 +67,21 @@ export function formatScore(score: number): string {
   return `${rounded >= 0 ? "+" : "-"}${Math.abs(rounded).toFixed(2)}`;
 }
 
-/** "in 41 min" / "in 2 h 5 min" / "now" */
-export function formatCountdown(targetIso: string, now: Date = new Date()): string {
+/**
+ * "in 41 min" / "in 2 h 5 min" / "now". With `seconds` (the fast candle sizes) the last ten
+ * minutes are exact: "in 3 min 20 s", and under two minutes "in 42 s".
+ */
+export function formatCountdown(
+  targetIso: string,
+  now: Date = new Date(),
+  { seconds = false } = {},
+): string {
+  const left = Math.round((new Date(targetIso).getTime() - now.getTime()) / 1000);
+  if (seconds && left > 0 && left < 600) {
+    if (left < 120) return `in ${left} s`;
+    const rest = left % 60;
+    return rest ? `in ${Math.floor(left / 60)} min ${rest} s` : `in ${left / 60} min`;
+  }
   const minutes = Math.round((new Date(targetIso).getTime() - now.getTime()) / 60_000);
   if (minutes <= 0) return "now";
   if (minutes < 60) return `in ${minutes} min`;

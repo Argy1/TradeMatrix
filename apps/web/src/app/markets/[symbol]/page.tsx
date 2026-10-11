@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
 import { CoinView } from "@/components/coin-view";
-import { TIMEFRAMES, type Timeframe } from "@/lib/api/client";
+import { DEFAULT_TIMEFRAME, isTimeframe, type Timeframe } from "@/lib/api/client";
 
 function pickTimeframe(value: string | string[] | undefined): Timeframe {
-  return TIMEFRAMES.includes(value as Timeframe) ? (value as Timeframe) : "1h";
+  return isTimeframe(value) ? value : DEFAULT_TIMEFRAME;
 }
 
 export async function generateMetadata({

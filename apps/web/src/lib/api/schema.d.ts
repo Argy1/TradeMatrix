@@ -134,6 +134,8 @@ export interface paths {
         /**
          * Track Record
          * @description Live track record: model accuracy next to the baselines, always (docs/06).
+         *
+         *     Read from the daily counts (signal_stats_daily), which the worker refreshes every hour.
          */
         get: operations["track_record_v1_performance_get"];
         put?: never;
@@ -153,7 +155,10 @@ export interface paths {
         };
         /**
          * Track Record Summary
-         * @description Live track record for every active coin and timeframe, plus the overall numbers.
+         * @description Live track record for every active coin and candle size, plus the overall numbers.
+         *
+         *     With `tf`, only that size (rows and overall). The fast sizes make far more signals than
+         *     the slow ones, so an overall number across all sizes is mostly a one-minute number.
          */
         get: operations["track_record_summary_v1_performance_summary_get"];
         put?: never;
@@ -324,7 +329,7 @@ export interface components {
              */
             type: "signal_change" | "prob_above" | "prob_below" | "price_above" | "price_below";
             /** Timeframe */
-            timeframe?: ("1h" | "4h" | "1d") | null;
+            timeframe?: ("1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d") | null;
             /** Threshold */
             threshold?: number | string | null;
             /**
@@ -618,6 +623,8 @@ export interface components {
             naive: number | null;
             /** Always Up */
             always_up: number | null;
+            /** Always Down */
+            always_down: number | null;
         };
         /** PerformanceOut */
         PerformanceOut: {
@@ -631,6 +638,8 @@ export interface components {
             n_predictions: number;
             /** N Resolved */
             n_resolved: number;
+            /** N Flat */
+            n_flat: number;
             /** Coverage */
             coverage: number | null;
             /** Accuracy */
@@ -654,6 +663,8 @@ export interface components {
         PerformanceSummary: {
             /** Days */
             days: number;
+            /** Timeframe */
+            timeframe: string | null;
             overall: components["schemas"]["PerformanceOut"];
             /** Rows */
             rows: components["schemas"]["PerformanceOut"][];
@@ -818,7 +829,7 @@ export interface operations {
         parameters: {
             query: {
                 symbol: string;
-                tf: "1h" | "4h" | "1d";
+                tf: "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
                 limit?: number;
                 before?: string | null;
             };
@@ -872,7 +883,7 @@ export interface operations {
         parameters: {
             query: {
                 symbol: string;
-                tf: "1h" | "4h" | "1d";
+                tf: "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
             };
             header?: never;
             path?: never;
@@ -904,7 +915,7 @@ export interface operations {
         parameters: {
             query: {
                 symbol: string;
-                tf: "1h" | "4h" | "1d";
+                tf: "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
                 limit?: number;
                 before?: string | null;
             };
@@ -958,7 +969,7 @@ export interface operations {
         parameters: {
             query?: {
                 symbol?: string | null;
-                tf?: ("1h" | "4h" | "1d") | null;
+                tf?: ("1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d") | null;
                 days?: number;
             };
             header?: never;
@@ -991,6 +1002,7 @@ export interface operations {
         parameters: {
             query?: {
                 days?: number;
+                tf?: ("1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d") | null;
             };
             header?: never;
             path?: never;

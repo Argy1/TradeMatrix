@@ -5,13 +5,18 @@ import { useState } from "react";
 import type { Performance } from "@/lib/api/client";
 import { usePerformanceSummary } from "@/lib/api/hooks";
 import { formatProbability } from "@/lib/format";
+import { usePickedSize } from "@/lib/picked-size";
 
+import { SizeSwitch } from "./size-switch";
 import { ErrorState, Skeleton } from "./states";
 
 const pct = (value: number | null | undefined) => (value == null ? "n/a" : formatProbability(value));
 
 function Row({ data }: { data: Performance }) {
-  const beats = data.accuracy != null && data.baseline.naive != null && data.accuracy > data.baseline.naive;
+  // Green only when the model beats the BEST simple rule, not just one of them.
+  const rules = [data.baseline.naive, data.baseline.always_up, data.baseline.always_down];
+  const best = Math.max(...rules.map((value) => value ?? 0));
+  const beats = data.accuracy != null && rules.some((value) => value != null) && data.accuracy > best;
   return (
     <tr className="border-t border-white/5">
       <th scope="row" className="py-3 pr-4 text-left font-semibold">
@@ -22,6 +27,8 @@ function Row({ data }: { data: Performance }) {
       <td className={`font-mono ${beats ? "text-up" : ""}`}>{pct(data.accuracy)}</td>
       <td className="font-mono">{pct(data.baseline.naive)}</td>
       <td className="font-mono">{pct(data.baseline.always_up)}</td>
+      <td className="font-mono">{pct(data.baseline.always_down)}</td>
+      <td className="font-mono">{data.n_flat}</td>
       <td className="font-mono">
         {data.brier?.toFixed(4) ?? "n/a"} <span className="text-muted">/ {data.brier_baseline?.toFixed(4) ?? "n/a"}</span>
       </td>
@@ -32,7 +39,8 @@ function Row({ data }: { data: Performance }) {
 
 export function TrackRecord() {
   const [days, setDays] = useState(30);
-  const summary = usePerformanceSummary(days);
+  const [size, pickSize] = usePickedSize();
+  const summary = usePerformanceSummary(days, size);
   const overall = summary.data?.overall;
   return (
     <div className="space-y-6">
@@ -49,11 +57,15 @@ export function TrackRecord() {
           </button>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="shrink-0 text-sm text-muted">Candle size</span>
+        <SizeSwitch value={size} onPick={pickSize} />
+      </div>
       {summary.isError && <ErrorState message="Could not load the track record." onRetry={() => summary.refetch()} />}
       {overall && (
         <div className="grid gap-4 sm:grid-cols-4">
           {[
-            ["Signals recorded", String(overall.n_predictions)],
+            [`${size} signals recorded`, String(overall.n_predictions)],
             ["Finished signals", String(overall.n_resolved)],
             ["Model accuracy (Up/Down calls)", pct(overall.accuracy)],
             ['Baseline "repeat the last move"', pct(overall.baseline.naive)],
@@ -72,10 +84,12 @@ export function TrackRecord() {
         </p>
       )}
       <div className="glass overflow-x-auto p-4 sm:p-6">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[900px] text-sm">
           <caption className="mb-3 text-left text-muted">
-            Live results per coin and candle size. Accuracy counts only Up/Down calls; coverage is
-            the share of candles where the model made a call.
+            Live results per coin for the picked candle size, refreshed every hour. Accuracy
+            counts only Up/Down calls; coverage is the share of candles where the model made a
+            call. On sizes under 1 hour a candle that closes at the same price is flat: it has no
+            result and is not counted as right or wrong.
           </caption>
           <thead className="text-left text-xs uppercase tracking-wider text-muted">
             <tr>
@@ -85,6 +99,8 @@ export function TrackRecord() {
               <th scope="col">Accuracy</th>
               <th scope="col">Naive</th>
               <th scope="col">Always up</th>
+              <th scope="col">Always down</th>
+              <th scope="col">Flat</th>
               <th scope="col">Brier / base</th>
               <th scope="col">Sample</th>
             </tr>
@@ -92,7 +108,7 @@ export function TrackRecord() {
           <tbody>
             {summary.isPending ? (
               <tr>
-                <td colSpan={8} className="py-2">
+                <td colSpan={10} className="py-2">
                   <Skeleton className="h-40" />
                 </td>
               </tr>
