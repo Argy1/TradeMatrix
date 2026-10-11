@@ -221,7 +221,7 @@ How to read it:
 - [x] Fast models trained on all history and registered (`train_models`), one status per coin. The running worker ignores them until the new worker is deployed.
 - [x] First candles of the fast sizes loaded (9,600 per coin). Daily counts built for the signals that already existed.
 - [x] Tests: 240 unit tests, 24 database tests against the real tables (rolled back), `ruff` clean.
-- [x] Rehearsal: 30 minutes on 2026-10-11 (17:00 to 17:29 UTC), run from Argy's PC with every minute rolled back: 784 of 784 expected signals, no errors, no repeated requests. The 1m signal was ready 3.3 s after the close in the middle case and within 4.3 s in 95% of the runs (slowest 5.9 s, at 17:00 when all five sizes closed together). The larger sizes follow the 1m signal: 5.0 s in the middle case, slowest 11.5 s. The first rehearsal was too slow (5 to 9 s when several sizes closed together), which led to the in-memory candles, the single-statement writes and the 1m-first order.
+- [x] Rehearsal: 30 minutes on 2026-10-11 (17:00 to 17:29 UTC), run from Argy's PC with every minute rolled back: 784 of 784 expected signals, no errors, no repeated requests. The 1m signal was ready 3.3 s after the close in the middle case and within 4.3 s in 95% of the runs (slowest 5.9 s, at 17:00 when all five sizes closed together). The larger sizes follow the 1m signal: 5.5 s in the middle case, slowest 11.5 s. The first rehearsal was too slow (5 to 9 s when several sizes closed together), which led to the in-memory candles, the single-statement writes and the 1m-first order.
 
 **Gate 5b-2:** passed on 2026-10-11. Check: `uv run python -m app.worker.rehearsal --minutes 30`.
 
