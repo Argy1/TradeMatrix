@@ -23,7 +23,7 @@ Prediction semantics (important):
 
 - `base_open_time` = open time of the last **closed** candle used; `base_close` = its close.
 - `target_open_time` = `base_open_time + timeframe`. The prediction says whether the close of that candle will be above `base_close`.
-- Outcome: `actual_direction = 'up'` if `target_close > base_close`, else `'down'` (a flat close counts as down, matching the training label). `correct` is `null` when the label was `neutral`.
+- Outcome: `actual_direction = 'up'` if `target_close > base_close`, else `'down'` (a flat close counts as down, matching the training label). On the fast sizes (under 1h) a flat close is `'flat'` instead: no result. `correct` is `null` when the label was `neutral` or the result is `flat`.
 - `sentiment_k = 0` means the row was produced in shadow mode (sentiment stored but not blended). The API reports this as `sentiment_used: false`; in that case no reason with code `sentiment` is listed, and the apps say that news is context only.
 
 ## Security model
@@ -37,7 +37,7 @@ Prediction semantics (important):
 Conventions:
 
 - JSON, snake_case, UTC ISO-8601 timestamps with `Z`. Prices as strings (`"67123.45"`) where precision matters.
-- `symbol` is the asset symbol (`BTC`, `ETH`, `SOL`, `BNB`, `XRP`). `tf` is `1h`, `4h` or `1d`.
+- `symbol` is the asset symbol (`BTC`, `ETH`, `SOL`, `BNB`, `XRP`). `tf` is `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `4h` or `1d`.
 - Errors: HTTP status + `{"error": {"code": "not_found", "message": "Asset not found"}}`.
 - Public endpoints: rate limit about 60 requests/min/IP (use `slowapi` or similar). Protected endpoints need `Authorization: Bearer <Supabase access token>`.
 - Pagination: `limit` (default 50, max 500) and `before` (ISO timestamp or id).
@@ -143,3 +143,20 @@ How it is built (`backend/app/alerts/`, `backend/app/api/alerts.py`):
 - **Price rules** are checked every minute (job `check_price_alerts`) and fire on a **crossing**: the price a minute ago was on one side of the level and the price now is on the other. A price that stays beyond the level does not fire again. The previous prices live in the worker's memory, so the first check after a worker restart only sets the starting point. If nobody has a price rule, no price is fetched.
 - **Notifications** are fixed templates filled with stored values, never AI text, and every body ends with `Not financial advice. Estimates only.`
 - **Responses:** `POST /v1/alerts` returns `201` with the rule; `PATCH` changes only the fields that are sent (`active`, `threshold`, `cooldown_minutes`); `DELETE` returns the remaining rules. `threshold` travels as a string. `GET /v1/notifications` returns `items` and the `unread` count. A rule or notification of another user is answered with `404`.
+
+## Fast sizes: daily counts and how long raw rows are kept (Phase 5b)
+
+- `candles` has two more columns, `trades` and `taker_buy_volume` (null on older rows): the order flow the fast
+  models use.
+- `signal_stats_daily` (PK `asset_id, timeframe, day`): plain counts and one sum per coin, size and UTC day
+  (`n_signals`, `n_resolved`, `n_flat`, `n_went_up`, `n_calls`, `n_correct`, up/down calls, the naive rule,
+  `brier_sum`). Public read, written by the worker. Counts can be added up, so any period, coin or size is a sum.
+- `GET /v1/performance` and `GET /v1/performance/summary` read these counts (refreshed every hour), for every
+  size. `days` counts whole UTC days. The summary takes an optional `tf`: the fast sizes make far more signals
+  than the slow ones, so an overall number across all sizes is mostly a one-minute number. The response has
+  `n_flat` and `baseline.always_down`.
+- Raw fast-size signals and candles are deleted after `FAST_RETENTION_DAYS` (90), once their day is counted. The
+  counts are never deleted, so the track record keeps its whole history. A single fast signal older than 90 days
+  can no longer be inspected (rule 7 in CLAUDE.md says so). The slow sizes are never deleted.
+- Alerts: signal rules on a fast size need `cooldown_minutes >= 15`.
+- `/v1/markets` returns one chip per size (`signals` has eight keys).

@@ -1,6 +1,6 @@
 """Load candle history into the database.
 
-    uv run python -m app.data.backfill                       # all coins, 1h + 4h + 1d
+    uv run python -m app.data.backfill                       # all coins, every candle size
     uv run python -m app.data.backfill --symbols BTC,ETH --timeframes 1h
     uv run python -m app.data.backfill --since 2020-09-01    # also load older history
 
@@ -73,7 +73,7 @@ async def run(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Backfill candles from the exchange.")
     parser.add_argument("--symbols", help="comma-separated, e.g. BTC,ETH (default: all active)")
-    parser.add_argument("--timeframes", default=",".join(TIMEFRAMES), help="default: 1h,4h,1d")
+    parser.add_argument("--timeframes", default=",".join(TIMEFRAMES), help="default: every size")
     parser.add_argument("--since", help="also load history back to this UTC date, e.g. 2020-09-01")
     args = parser.parse_args()
     timeframes = [t for t in args.timeframes.split(",") if t]

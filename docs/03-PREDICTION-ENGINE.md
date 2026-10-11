@@ -144,3 +144,29 @@ Generate up to 3 reasons from the feature snapshot with simple rule templates, r
 - Calibration test: output probabilities are within [0, 1] and monotonic after isotonic.
 - Prediction job idempotency: running it twice creates one row.
 - Gemini client test with a mocked response and a malformed response.
+
+## Fast sizes: 1m, 3m, 5m, 15m, 30m (Phase 5b, 2026-10-11)
+
+Same target, same Neutral band, same honesty rules. What differs, and why:
+
+- **A flat next candle has no label.** If `close[t+1] == close[t]` the row is not used for training and is not
+  counted as right or wrong (`build_labels(..., skip_flat=True)`). On 1h a flat close is rare (1 to 3%) and counts
+  as "not up". On fast candles of low-priced coins it is common (measured: TRX 19% at 15m, more at 1m). Counted
+  as "not up", a model would learn to say Down all day and be "right" without knowing any direction. The model
+  still predicts every candle; live, such a signal gets the outcome `flat` with `correct = null`.
+- **History in files, not in the database.** `python -m app.data.history` downloads into
+  `backend/data/history/*.parquet` (git-ignored): 1m 12 months, 3m 18, 5m 24, 15m and 30m 36. The database only
+  keeps what the live system needs (about 1,500 candles per coin and size at the start, then 90 days).
+- **Two switches in `build_features`:** `quiet_safe` (a stretch with no trades or no price change gets neutral
+  values instead of NaN) and `extended` (order flow: taker-buy share of the volume and the number of trades;
+  longer context: returns over 48/96/288 candles, distance from EMA 200). The 1h/4h/1d features are unchanged.
+- **Windows** (`FAST_WINDOWS` in `app/ml/config.py`): 1m trains on 60 days, validates on 14, tests on 7; 30m
+  trains on 180 days, validates on 60, tests on 14.
+- **Three candidates, compared on BTC, ETH, SOL, DOGE on folds before `FAST_EVAL_FROM`:** plain features per
+  coin, order-flow features per coin, order-flow features in one pooled model per size. Chosen (`CHOSEN`): the
+  pooled model for 3m, 5m, 15m, 30m; the plain per-coin model for 1m (a tie on Brier gain, broken by the accuracy
+  edge). A pooled model is one file, but every coin is judged on its own predictions.
+- **Baselines:** `always_down` is reported next to `naive` and `always_up`, and "ok" now needs the model to beat
+  the best of the three in each fold (this also applies to the slow sizes at their next training).
+- **Retraining** is a command for now: `python -m app.data.history` (adds the new candles), then
+  `python -m app.ml.train_models --timeframes 1m,3m,5m,15m,30m`, then redeploy `worker`. Proposed every two weeks.

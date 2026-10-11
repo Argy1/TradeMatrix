@@ -4,7 +4,7 @@
 
 ## One-sentence product
 
-TradeMatrix AI tells a crypto trader how likely a coin is to close higher or lower on its next 1h, 4h or 1d candle, shows the reasons, and proves how past signals actually performed.
+TradeMatrix AI tells a crypto trader how likely a coin is to close higher or lower on its next candle (from 1 minute to 1 day), shows the reasons, and proves how past signals actually performed.
 
 ## Users
 
@@ -22,7 +22,7 @@ TradeMatrix AI tells a crypto trader how likely a coin is to close higher or low
 ## v1 scope
 
 **Coins (vs USDT):** BTC, ETH, SOL, BNB, XRP, plus (Argy's scope change, 2026-10-03) DOGE, ADA, LINK, AVAX, UNI, NEAR, LTC, TRX, DOT, BCH, XLM: 16 coins. Rule for adding more: about 6+ years of Binance history and solid daily volume. Stored in the `assets` table so more can be added without code changes (one migration + backfill + model training).
-**Timeframes:** 1h, 4h, 1d. One prediction per coin per timeframe per candle close (the next candle).
+**Timeframes:** 1m, 3m, 5m, 15m, 30m (the "fast" sizes, Argy's scope change of 2026-10-11) and 1h, 4h, 1d. 15m takes the place of 10m, which Binance does not offer. One prediction per coin per timeframe per candle close (the next candle). On the fast sizes a candle that closes at exactly the previous close is "flat" and has no result (docs/03).
 
 ### Must have
 

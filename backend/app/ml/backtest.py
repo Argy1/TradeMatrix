@@ -306,7 +306,11 @@ def write_report(
     config = config or chosen(timeframe)
     path = REPORTS_DIR / f"backtest_{name}_{timeframe}_{stamp}_{config.name}.md"
     if is_fast(timeframe):
-        preds.to_parquet(path.with_suffix(".parquet"))  # far smaller than CSV for these sizes
+        # Parquet is far smaller than CSV for these sizes. The frame's notes (attrs) hold the
+        # feature importances, which Parquet cannot store, so they are left out of the file.
+        plain = preds.copy(deep=False)
+        plain.attrs = {}
+        plain.to_parquet(path.with_suffix(".parquet"))
     else:
         preds.to_csv(path.with_suffix(".csv"))
     m, b, s = summary["model"], summary["baselines"], summary["strategy"]

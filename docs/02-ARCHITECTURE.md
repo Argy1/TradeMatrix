@@ -48,6 +48,9 @@ One process, one instance only. Scheduled jobs (UTC):
 | `evaluate_alerts` | after each candle close, last step | Check signal alerts against the new predictions, write `notifications` |
 | `ingest_news` | every 15 min (:02, :17, :32, :47) | Fetch headlines from the RSS feeds, dedupe by URL and by title, tag assets by keyword, delete headlines older than 90 days |
 | `score_sentiment` | every 15 min (:04, :19, :34, :49) | Send unscored headlines from the last 24 h to Gemini in batches, validate and store the results; stops at the daily budget |
+| `fast_close` | every minute, second :02 | The same four steps as the hourly run (`ingest_candles_fast`, `run_predictions_fast`, `resolve_outcomes_fast`, `evaluate_alerts`) for the fast sizes that closed in that minute: 1m always, 3m/5m/15m/30m on their own minutes. Own job names, so the hourly run is untouched. A run that cannot start within 20 seconds is dropped, never queued |
+| `summarize_signals` | every hour at :10:40, and the last week once a day at 00:20:40 UTC | Add the signals up per coin, size and day into `signal_stats_daily`; the track record reads these counts |
+| `prune_fast_history` | daily, 00:40:40 UTC | Delete raw fast-size signals and candles older than `FAST_RETENTION_DAYS` (90), only for days that are already counted |
 | `check_price_alerts` | every 1 min (second :30) | If any price alert exists: fetch last prices and fire the alerts whose level was crossed since the previous check |
 | `retrain_models` | weekly, Sunday 02:00 UTC | Walk-forward train per asset/timeframe; activate new model only if it is not worse |
 | `heartbeat` | every 5 min | Log a heartbeat and update `worker_heartbeat` for monitoring |

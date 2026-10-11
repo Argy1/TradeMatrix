@@ -139,3 +139,26 @@ Order, top to bottom:
 2. Build components in this order: SignalCard (with the orb and meter), CoinChip, TimeframeSwitch, Chart, ReasonRow, ReliabilityBars, SignalTile, NewsRow, GuideStrip, AppHeader/TabBar.
 3. Then pages: Coin detail, Markets, Track record, Watchlist, Alerts, About.
 4. Take screenshots with Playwright at 1440, 1024, 768 and 390 px and compare with the design canvas; fix differences before moving on.
+
+## Fast candle sizes (Phase 5b, 2026-10-11)
+
+These rules add to the sections above; where they differ for a fast size, this section wins.
+
+- **Size switch:** one row of keys, `1m 3m 5m 15m 30m | 1h 4h 1d`, with a thin divider between the fast and the
+  slow group. It scrolls sideways on a phone. 1h stays the default.
+- **Markets and watchlist:** one "Candle size" picker above the list; each coin row shows the chip of the picked
+  size (eight chips per row do not fit). The choice is remembered on the device.
+- **Countdown:** under one hour the validity line counts in seconds below two minutes ("in 42 s") and in minutes
+  and seconds below ten ("in 3 min 20 s").
+- **Fresh by the second:** the card switches to the new signal as soon as it arrives. If the shown signal's
+  candle has closed and no new one has arrived, the card says "Waiting for the next signal" instead of showing
+  an old direction.
+- **Fast note:** under every fast signal, above the disclaimer: "Short candles are mostly noise. Many signals
+  will be Neutral, and fees are usually larger than the move."
+- **Flat result:** in "Recent signals" a flat candle is shown as "Flat" with the text "no result", in the
+  neutral color, never as right or wrong.
+- **Track record:** a size filter (default 1h), the "always Down" baseline next to the other two, and the number
+  of signals that ended flat.
+- **New reason:** "Buyers (or Sellers) were the more active side: 58% of the volume over the last 20 candles",
+  code `order_flow`. Explainer: "Who was in a hurry. Buyers who do not wait push the price up; sellers who do
+  not wait push it down."

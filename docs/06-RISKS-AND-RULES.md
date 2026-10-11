@@ -56,3 +56,13 @@ Short version for tight spaces: `Not financial advice. Estimates only.`
 - Show "profit" projections or price targets as facts.
 - Commit credentials, call Gemini from a client app, or disable RLS to "make it work".
 - Change the disclaimer or brand line without Argy's approval.
+
+## Fast sizes (added 2026-10-11)
+
+- Short candles are mostly noise. The apps say so under every fast signal, in these words (approved by Argy
+  with the Phase 5b plan): "Short candles are mostly noise. Many signals will be Neutral, and fees are usually
+  larger than the move." The mandatory disclaimer above is unchanged and still shown.
+- A fast size that did not beat the simple rules in the evaluation is shown with the same "below the baseline"
+  warning as the slow sizes. Nothing is hidden and nothing is tuned until it looks good.
+- A flat candle has no result on the fast sizes. The track record shows how many signals ended flat.
+- Raw fast signals are kept for 90 days; their daily counts are kept forever (docs/04).
