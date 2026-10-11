@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.config import BACKEND_DIR, REPO_ROOT, Settings
-from app.worker.jobs import closed_fast_timeframes, closed_timeframes, try_lock
+from app.worker.jobs import closed_fast_timeframes, closed_timeframes, fast_groups, try_lock
 
 
 def test_closed_timeframes_follow_the_candle_boundaries() -> None:
@@ -28,6 +28,13 @@ def test_fast_sizes_close_on_their_own_minutes() -> None:
     assert at(13, 30) == ["1m", "3m", "5m", "15m", "30m"]
     assert at(13, 0) == ["1m", "3m", "5m", "15m", "30m"]  # the slow sizes have their own run
     assert at(13, 7, second=59) == ["1m"]  # late in the minute: still that minute's candles
+
+
+def test_the_one_minute_signal_is_always_worked_on_first() -> None:
+    assert fast_groups(["1m"]) == [["1m"]]
+    assert fast_groups(["1m", "3m"]) == [["1m"], ["3m"]]
+    assert fast_groups(["1m", "3m", "5m", "15m", "30m"]) == [["1m"], ["3m", "5m", "15m", "30m"]]
+    assert fast_groups([]) == []
 
 
 @pytest.mark.db

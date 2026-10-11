@@ -141,6 +141,13 @@ def warm_up_job(cache: ModelCache, frames: FrameCache):
     return work
 
 
+def fast_groups(sizes: list[str]) -> list[list[str]]:
+    """The order of work inside one fast run: ["1m"] first, then the other sizes together."""
+    first = [tf for tf in sizes if tf == "1m"]
+    rest = [tf for tf in sizes if tf != "1m"]
+    return [group for group in (first, rest) if group]
+
+
 def outcomes_job(timeframes: list[str] | None = None, look_back: timedelta = timedelta(days=7)):
     async def work(session: AsyncSession) -> dict:
         return await resolve_outcomes(session, timeframes, look_back=look_back)
@@ -239,11 +246,15 @@ async def fast_close(
 
     The sizes are fixed once at the start: a run that begins at 12:05:01 handles the candles
     that closed at 12:05:00, even if a step finishes after the minute has turned.
+
+    The one-minute signal goes first, all the way to the database, and only then the larger
+    sizes that closed in the same minute. A one-minute signal loses value every second; a
+    30-minute signal that is ready a few seconds later is as good as before.
     """
-    sizes = closed_fast_timeframes(datetime.now(UTC))
     quiet = {"quiet_when_idle": True}  # 1,440 "all fine" lines a day per step would bury the rest
-    await run_job("ingest_candles_fast", ingest_job(client, sizes), **quiet)
-    await run_job("run_predictions_fast", predictions_job(cache, blend_k, sizes, frames))
+    for sizes in fast_groups(closed_fast_timeframes(datetime.now(UTC))):
+        await run_job("ingest_candles_fast", ingest_job(client, sizes), **quiet)
+        await run_job("run_predictions_fast", predictions_job(cache, blend_k, sizes, frames))
     # Only the newest signals can have just received their result; older ones are caught by
     # the catch-up at start.
     recent = outcomes_job(list(FAST_TIMEFRAMES), look_back=timedelta(hours=2))

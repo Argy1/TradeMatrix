@@ -18,7 +18,7 @@ from app.timeframes import TIMEFRAMES, floor_time, last_closed_open_time
 BACKFILL_DAYS = {"1m": 2, "3m": 4, "5m": 6, "15m": 16, "30m": 32, "1h": 730, "4h": 1095, "1d": 1826}
 
 
-FETCH_PARALLEL = 8  # requests to the exchange at the same time
+FETCH_PARALLEL = 16  # requests to the exchange at the same time (far below its rate limit)
 RETRY_AFTER = 1.0  # seconds to wait when the candle that just closed is not served yet
 
 
