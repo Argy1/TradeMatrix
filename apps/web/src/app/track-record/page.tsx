@@ -11,7 +11,7 @@ export default function TrackRecordPage() {
         <h1 className="font-display text-3xl font-bold sm:text-5xl">Track record</h1>
         <p className="mt-2 max-w-3xl text-fg-2">
           Every signal is stored and scored when its candle closes. We always show the model next to
-          two simple baselines, even when the model loses. Brier score measures probability quality:
+          four simple rules, even when the model loses. Brier score measures probability quality:
           lower is better, 0.25 is a coin flip.
         </p>
       </div>
