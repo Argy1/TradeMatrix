@@ -19,6 +19,7 @@ This repository starts as a **plan**. The plan lives in `CLAUDE.md` and `docs/`.
 | `docs/06-RISKS-AND-RULES.md` | Legal, security, honesty rules, disclaimer text |
 | `docs/07-LEARNING-GUIDE.md` | Glossary and what to learn in which order |
 | `docs/08-DESIGN.md` | "Matrix Glass" 3D design system, signal card spec, UX and accessibility rules |
+| `docs/09-RESTORE.md` | What is done and not done, and how to rebuild after Railway or the database is deleted |
 | `supabase/migrations/` | Ready-to-apply SQL for the first schema |
 
 ## Prerequisites
