@@ -225,21 +225,25 @@ How to read it:
 
 **Gate 5b-2:** passed on 2026-10-11. Check: `uv run python -m app.worker.rehearsal --minutes 30`.
 
-### Step 3 — Go live in the backend (needs Argy first)
+### Step 3 — Go live in the backend
 
-- [ ] Argy: upgrade Supabase to Pro. The fast sizes add about 32 MB a day; the free database (500 MB, 165 MB used on 2026-10-11) would be full in about ten days. Pro is billed per organization and its compute credit covers one project, so move `AgriVision` or `TradeMatrix` to its own organization first.
-- [ ] Deploy `api`, then `worker` between two hourly runs (merge `phase-5b` to `main` after that; the website's new code needs the new API).
-- [ ] Watch one day.
+- [ ] Argy: Supabase Pro for this project. Argy wrote "done" on 2026-10-13, but a check on the same day showed that the project `TradeMatrix` is still in the organization "Kuliah" on the Free plan; the Pro plan is on Argy's other organization, "Argy Enterprise", which does not contain it. Fix: transfer the project into "Argy Enterprise" (Project Settings, General, Transfer project) or upgrade "Kuliah". The database was 184 MB on 2026-10-13 and grows about 32 MB a day, so the free 500 MB lasts until about 2026-10-22.
+- [x] Deployed on 2026-10-13 on Argy's instruction: `api` live at 15:58 UTC, `worker` at 16:02 UTC, right after the 16:00 hourly run, which the old worker completed. The new worker loaded the two days of fast candles that were missing, the 80 fast models and the newest candles, and made its first fast signals at 16:03.
+- [ ] Watch one day, until 2026-10-14 16:03 UTC.
 
 **Gate 5b-3:** 24 hours live: at least 99% of the expected fast signals stored, a one-minute signal ready within 5 seconds of the close for 95% of the runs, no error streak longer than 2 minutes, growth near 32 MB a day, every hourly 1h/4h/1d run complete.
 
-### Step 4 — Website and app (written and tested on the branch, not deployed)
+First minutes live (16:03 to 16:06 UTC on 2026-10-13): every 1m candle had its 16 signals, stored 1.8 s after the close on average (slowest 2.3 s); 3m after 3.1 s, 5m after 4.2 s; results were filled in, two of them `flat`; no job reported an error. The 24 hours are not over yet.
 
-- [x] Website: size switch (fast, divider, slow) on the coin page, markets list, watchlist and track record; seconds countdown; "Waiting for the next signal" after a fast candle closes; Flat results; best simple rule and the four rules in the track record. Checked locally against the branch API: size switch, 1m and 5m charts, track record.
+### Step 4 — Website and app
+
+- [x] Website: size switch (fast, divider, slow) on the coin page, markets list, watchlist and track record; seconds countdown; "Waiting for the next signal" after a fast candle closes; Flat results; best simple rule and the four rules in the track record.
 - [x] App: the same, with shared size keys; 29 tests, `flutter analyze` clean.
-- [ ] After Gate 5b-3: merge to `main` (Vercel deploys the website), check a one-minute signal on live data in both, build and send the new APK.
+- [x] Released on 2026-10-13 on Argy's instruction, before the 24 hours of Gate 5b-3 were over: `phase-5b` merged into `main` (`c32f97e`), Vercel served the new website at 16:04 UTC. Checked on live data: the BTC 1m card changed to the new signal by itself every minute (no reload), the countdown runs in seconds, the fast-size note and the disclaimer are shown, the markets list shows the chip of the picked size, no console errors.
+- [x] APK 0.2.0 built and sent to Argy (`app-arm64-v8a-release.apk`, 18 MB).
+- [ ] Argy: try the app on a phone. The app's fast sizes are checked by its tests only.
 
-**Gate 5b-4:** checks pass and both clients show a one-minute signal changing within seconds of the close on live data.
+**Gate 5b-4:** passed for the website on 2026-10-13 (a one-minute signal changed within seconds of the close on live data). For the app it stays open until Argy has tried the APK.
 
 ---
 
