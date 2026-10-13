@@ -63,6 +63,7 @@ class BinanceClient(ExchangeClient):
         self._page_pause = page_pause
         self._clock_offset_ms: int | None = None  # exchange clock minus our clock
         self._clock_asked = 0.0
+        self._clock_lock = asyncio.Lock()  # 16 coins start together: only the first one asks
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -105,11 +106,12 @@ class BinanceClient(ExchangeClient):
         the answer arrived, which makes the estimate a little behind the real exchange time,
         never ahead: a candle can be seen as closed slightly late, never early.
         """
-        if self._clock_offset_ms is None or time.monotonic() - self._clock_asked > CLOCK_TTL:
-            server_ms = int((await self._get("/api/v3/time"))["serverTime"])
-            self._clock_offset_ms = server_ms - int(time.time() * 1000)
-            self._clock_asked = time.monotonic()
-        return int(time.time() * 1000) + self._clock_offset_ms
+        async with self._clock_lock:
+            if self._clock_offset_ms is None or time.monotonic() - self._clock_asked > CLOCK_TTL:
+                server_ms = int((await self._get("/api/v3/time"))["serverTime"])
+                self._clock_offset_ms = server_ms - int(time.time() * 1000)
+                self._clock_asked = time.monotonic()
+            return int(time.time() * 1000) + self._clock_offset_ms
 
     async def get_klines(
         self,

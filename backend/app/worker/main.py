@@ -163,6 +163,11 @@ def build_scheduler(
 async def main() -> None:
     # stdout, not stderr: Railway shows stderr lines as errors.
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+    # With a run every minute, one line per exchange request and two lines per scheduler job
+    # would be about 40,000 lines a day and bury our own job lines. Their warnings stay
+    # (a failed request, a run that started late or was missed).
+    for noisy in ("httpx", "apscheduler"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     settings = get_settings()
     init_sentry("worker")
     client = get_exchange_client(settings)

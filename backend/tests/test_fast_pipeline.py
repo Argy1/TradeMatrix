@@ -1,6 +1,7 @@
 """The every-minute pipeline (Phase 5b): reading many coins at once, the exchange clock, the
 track-record maths on counts, and the order-flow reason. No database needed."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -172,6 +173,25 @@ async def test_exchange_clock_is_asked_once_and_never_runs_ahead() -> None:
     assert asked == 1  # remembered for 30 seconds: 8 uses, one request
     assert readings == sorted(readings)
     assert 0 <= readings[-1] - server_ms < 2_000  # it follows our clock from the measured point
+    await client.aclose()
+
+
+async def test_sixteen_coins_starting_together_ask_the_clock_once() -> None:
+    asked = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal asked
+        if request.url.path == "/api/v3/time":
+            asked += 1
+            return httpx.Response(200, json={"serverTime": 1_791_730_000_000})
+        return httpx.Response(200, json=[])
+
+    http = httpx.AsyncClient(
+        base_url="https://fake.exchange", transport=httpx.MockTransport(handler)
+    )
+    client = BinanceClient("https://fake.exchange", http=http)
+    await asyncio.gather(*(client.get_klines(f"COIN{i}USDT", "1m", limit=2) for i in range(16)))
+    assert asked == 1
     await client.aclose()
 
 
