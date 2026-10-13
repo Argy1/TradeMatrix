@@ -229,6 +229,7 @@ How to read it:
 
 - [ ] Argy: Supabase Pro for this project. Argy wrote "done" on 2026-10-13, but a check on the same day showed that the project `TradeMatrix` is still in the organization "Kuliah" on the Free plan; the Pro plan is on Argy's other organization, "Argy Enterprise", which does not contain it. Fix: transfer the project into "Argy Enterprise" (Project Settings, General, Transfer project) or upgrade "Kuliah". The database was 184 MB on 2026-10-13 and grows about 32 MB a day, so the free 500 MB lasts until about 2026-10-22.
 - [x] Deployed on 2026-10-13 on Argy's instruction: `api` live at 15:58 UTC, `worker` at 16:02 UTC, right after the 16:00 hourly run, which the old worker completed. The new worker loaded the two days of fast candles that were missing, the 80 fast models and the newest candles, and made its first fast signals at 16:03.
+- [x] 16:12 UTC: the worker was redeployed once more with two small fixes found in its first log (the exchange clock is asked once per run instead of once per coin; `httpx` and APScheduler log warnings only). The 16:12 one-minute run was lost in that restart: the only incomplete minute of the first ten.
 - [ ] Watch one day, until 2026-10-14 16:03 UTC.
 
 **Gate 5b-3:** 24 hours live: at least 99% of the expected fast signals stored, a one-minute signal ready within 5 seconds of the close for 95% of the runs, no error streak longer than 2 minutes, growth near 32 MB a day, every hourly 1h/4h/1d run complete.
